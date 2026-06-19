@@ -3,26 +3,31 @@
 Private, **local** CLI toolkit that turns a change set (local branch, staged
 diff, or GitHub PR) into a ready-to-paste prompt for Cursor or another AI tool.
 
-It generates **review prompts and summaries only**. It does the boring context
-gathering — diff, changed files, repo rules, README context, PR metadata — and
-hands you a single prompt you can paste into your AI tool of choice.
+Most of it generates **review prompts and summaries only** — it does the boring
+context gathering (diff, changed files, repo rules, README context, PR metadata)
+and hands you a single prompt to paste into your AI tool of choice. One command,
+`ai-open-pr`, additionally **commits, pushes, and opens a PR** for you.
 
-> **These tools never write to GitHub.** No comments, no reviews, no pushes, no
-> commits. All logic stays on your machine. See [Privacy & security](#privacy--security).
+> **The three prompt tools never write to GitHub** (no comments, reviews, pushes,
+> or commits). The fourth tool, **`ai-open-pr`, does modify your repo and the
+> remote** — it confirms before each step. See [Privacy & security](#privacy--security).
 
 ## What you get
 
-| Command         | Purpose                                                        |
-| --------------- | ------------------------------------------------------------- |
-| `ai-pr-review`  | Strict multi-agent code review prompt                          |
-| `ai-explain-pr` | Plain-English explanation of a change set                     |
-| `ai-create-pr`  | Clean GitHub PR description from your branch diff              |
+| Command         | Purpose                                              | Modifies anything? |
+| --------------- | ---------------------------------------------------- | ------------------ |
+| `ai-pr-review`  | Strict multi-agent code review prompt                | No (read-only)     |
+| `ai-explain-pr` | Plain-English explanation of a change set            | No (read-only)     |
+| `ai-draft-pr`   | Drafts a PR title + description (fills team template) | No (read-only)     |
+| `ai-open-pr`    | Commits, pushes, and **opens** a GitHub PR           | **Yes**            |
 
-Each command can read from:
+The read-only commands can work from:
 
 - a **local branch** vs a base ref (`git diff BASE...HEAD`),
 - **staged** changes (`git diff --cached`), or
 - a **GitHub PR** via the `gh` CLI (`ai-pr-review` / `ai-explain-pr` only).
+
+`ai-open-pr` always works on the **current branch** vs a base ref.
 
 ## Installation
 
@@ -41,7 +46,8 @@ cd ai-gh-tools
 - symlink the commands into `~/.local/bin`,
 - make them executable,
 - add `~/.local/bin` to your `PATH` (in `.zshrc` or `.bashrc`) if missing,
-- create git aliases (`git ai-review`, `git ai-explain`, `git ai-create-pr`).
+- create git aliases (`git ai-review`, `git ai-explain`, `git ai-draft-pr`,
+  `git ai-open-pr`).
 
 Open a new shell (or `source ~/.zshrc`) afterwards.
 
@@ -69,9 +75,13 @@ ai-pr-review origin/main --out /tmp/pr-review.md
 ai-explain-pr --pr 123 --copy
 ai-explain-pr --staged --copy
 
-# Generate a PR description from the branch diff
-ai-create-pr origin/main --copy
-ai-create-pr --staged --out /tmp/pr-description.md
+# Draft a PR title + description (fills the team template via AI)
+ai-draft-pr origin/main --copy
+ai-draft-pr --staged --out /tmp/pr-description.md
+
+# Actually open a PR: commit pending work, push, and create it on GitHub
+ai-open-pr origin/main             # prompts before commit / push / create
+ai-open-pr origin/main --dry-run   # preview only; changes nothing
 ```
 
 If you omit the base ref, the tools auto-detect one by trying, in order:
@@ -79,20 +89,23 @@ If you omit the base ref, the tools auto-detect one by trying, in order:
 
 ### Common options
 
-| Option                   | Commands            | Meaning                                       |
-| ------------------------ | ------------------- | --------------------------------------------- |
-| `--pr REF`               | review, explain     | Review a GitHub PR (number, URL, or branch)   |
-| `--comments`             | review, explain     | Include existing PR comments (needs `--pr`)   |
-| `--repo OWNER/REPO`      | review, explain     | Override the GitHub repo for `gh`             |
-| `--staged`               | all                 | Use staged changes                            |
-| `--include-working-tree` | all                 | Also include unstaged changes (local mode)    |
-| `--exclude PATTERN`      | review, explain     | Drop matching files from a PR diff (repeat)   |
-| `--copy`                 | all                 | Copy prompt to clipboard                      |
-| `--out FILE`             | all                 | Write prompt to a file                        |
-| `--no-project-rules`     | all                 | Skip the target repo's `.cursor/rules`        |
-| `--no-tool-rules`        | all                 | Skip this toolkit's rules                     |
-| `--no-readmes`           | all                 | Skip README context                           |
-| `-h`, `--help`           | all                 | Show help                                     |
+These apply to the read-only prompt commands (`ai-pr-review`, `ai-explain-pr`,
+`ai-draft-pr`). `ai-open-pr` has its own options — see `ai-open-pr --help`.
+
+| Option                   | Commands             | Meaning                                       |
+| ------------------------ | -------------------- | --------------------------------------------- |
+| `--pr REF`               | review, explain      | Review a GitHub PR (number, URL, or branch)   |
+| `--comments`             | review, explain      | Include existing PR comments (needs `--pr`)   |
+| `--repo OWNER/REPO`      | review, explain      | Override the GitHub repo for `gh`             |
+| `--staged`               | review, explain, draft | Use staged changes                          |
+| `--include-working-tree` | review, explain, draft | Also include unstaged changes (local mode)  |
+| `--exclude PATTERN`      | review, explain      | Drop matching files from a PR diff (repeat)   |
+| `--copy`                 | review, explain, draft | Copy prompt to clipboard                    |
+| `--out FILE`             | review, explain, draft | Write prompt to a file                      |
+| `--no-project-rules`     | review, explain, draft | Skip the target repo's `.cursor/rules`      |
+| `--no-tool-rules`        | review, explain, draft | Skip this toolkit's rules                   |
+| `--no-readmes`           | review, explain, draft | Skip README context                         |
+| `-h`, `--help`           | all                  | Show help                                     |
 
 ## How to review my own PR
 
@@ -117,15 +130,54 @@ ai-pr-review --pr 123 --repo owner/other-repo --copy
 This uses `gh pr view` / `gh pr diff` (read-only) to fetch the PR. With
 `--comments`, existing discussion is included as context for the AI.
 
-## How to generate a PR description
+## How to draft a PR description (read-only)
 
 ```bash
 cd ~/code/some-repo
-ai-create-pr origin/main --copy
+ai-draft-pr origin/main --copy
 ```
 
-Paste the result into the GitHub "Open a pull request" body. You decide whether
-to actually open the PR — the tool only drafts the text.
+This produces a prompt that asks an AI to fill the team PR template
+([`templates/pr-body.md`](templates/pr-body.md)). Paste it into Cursor, get the
+filled-in title + body, and either paste it into GitHub yourself or feed it to
+`ai-open-pr --body-file`. `ai-draft-pr` never touches GitHub.
+
+## How to actually open a PR
+
+`ai-open-pr` is the one command that changes things. From your feature branch:
+
+```bash
+cd ~/code/some-repo
+ai-open-pr origin/main
+```
+
+What it does, in order (confirming before each mutating step):
+
+1. **Commits** any uncommitted changes (`git add -A` + `git commit`). Provide the
+   message with `-m "..."`, or you'll be prompted, or it auto-generates one.
+2. **Pushes** the current branch (`git push -u origin HEAD`).
+3. **Opens** the PR against the base with `gh pr create`, using the team template
+   as the body (pre-filled with the changed-file list). Your `$EDITOR` opens so
+   you can edit the body first.
+
+Useful flags:
+
+```bash
+ai-open-pr origin/main -m "Add fast resize" --title "Add fast resize" --draft
+ai-open-pr origin/main --dry-run        # show the plan, change nothing
+ai-open-pr origin/main --yes            # non-interactive: skip all prompts
+ai-open-pr --body-file /tmp/pr-body.md  # use an AI-filled body from ai-draft-pr
+ai-open-pr origin/main --no-edit        # don't open the editor for the body
+```
+
+Combined flow (AI-written body, then open the PR):
+
+```bash
+ai-draft-pr origin/main --out /tmp/draft.md   # paste into AI, save filled body to /tmp/pr-body.md
+ai-open-pr origin/main --body-file /tmp/pr-body.md
+```
+
+`ai-open-pr` never force-pushes, never amends, and never bypasses git hooks.
 
 ## Custom & repo-specific rules
 
@@ -154,24 +206,28 @@ No re-install needed unless `install.sh` itself changed (re-run it if so).
 
 ## Privacy & security
 
-- **Read-only by design.** The scripts only run read-only git/`gh` commands.
-  They never call `gh pr review`, `gh pr comment`, `gh pr merge`, `git push`, or
-  create commits.
+- **Three tools are read-only.** `ai-pr-review`, `ai-explain-pr`, and
+  `ai-draft-pr` only run read-only git/`gh` commands. They never call
+  `gh pr review`, `gh pr comment`, `gh pr merge`, `git push`, or create commits.
+- **`ai-open-pr` is the exception.** It intentionally commits, pushes, and opens
+  a PR. It confirms before each mutating step (unless `--yes`), supports
+  `--dry-run`, and never force-pushes, amends, or skips git hooks.
 - **Local-first.** Output goes to stdout, your clipboard, or a file you choose.
-  The tools themselves make no network calls beyond `gh`'s read-only PR fetches
-  in `--pr` mode.
-- **You control what leaves your machine.** Whatever AI tool you paste the
-  prompt into is up to you; mind your diffs for secrets/PII before pasting.
+  Network access is limited to `gh` (read-only PR fetches, plus `gh pr create`
+  for `ai-open-pr`).
+- **You control what leaves your machine.** Whatever AI tool you paste a prompt
+  into is up to you; mind your diffs for secrets/PII before pasting.
 - Use `--exclude PATTERN` (PR mode) to drop noisy or sensitive paths from a diff.
 
 ## Repo layout
 
 ```
 ai-gh-tools/
-  bin/            # the three commands
+  bin/            # ai-pr-review, ai-explain-pr, ai-draft-pr, ai-open-pr
   lib/            # shared bash helpers (sourced by bin/)
   prompts/        # the AI instruction templates
   rules/          # general.mdc + optional rules/<repo-name>.mdc overlays
+  templates/      # pr-body.md (the team PR template used by ai-open-pr)
   examples/       # sample generated output
   install.sh
   README.md

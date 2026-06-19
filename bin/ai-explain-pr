@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# ai-explain-pr — generate a plain-English explanation prompt for a change set.
+#
+# Read-only: never posts comments, reviews, or pushes anything.
+set -euo pipefail
+
+_resolve_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+_BIN_DIR="$(_resolve_dir)"
+_LIB_DIR="$(cd "$_BIN_DIR/.." && pwd)/lib"
+
+# shellcheck source=/dev/null
+. "$_LIB_DIR/common.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/clipboard.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/git.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/github.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/context.sh"
+
+AGH_PROMPT_NAME="pr-explain.md"
+AGH_ALLOW_PR=1
+AGH_USAGE="$(cat <<'EOF'
+ai-explain-pr — generate a plain-English explanation prompt for a change set.
+
+USAGE:
+  ai-explain-pr [BASE_REF] [options]
+  ai-explain-pr --pr REF [options]
+  ai-explain-pr --staged [options]
+
+MODES:
+  BASE_REF            Explain local branch changes (git diff BASE...HEAD).
+                      Defaults to auto-detected base if omitted.
+  --pr REF            Explain a GitHub PR by number, URL, or branch (uses gh).
+  --staged            Explain staged changes (git diff --cached).
+
+OPTIONS:
+  --comments          Include existing PR comments (only with --pr).
+  --repo OWNER/REPO   GitHub repo override passed to gh.
+  --copy              Copy the generated prompt to the clipboard.
+  --out FILE          Write the generated prompt to FILE.
+  --include-working-tree
+                      Also include unstaged local changes (local mode).
+  --exclude PATTERN   Exclude files matching PATTERN from PR diff (repeatable).
+  --no-project-rules  Skip the target repo's .cursor/rules.
+  --no-tool-rules     Skip this toolkit's rules.
+  --no-readmes        Skip README context.
+  -h, --help          Show this help.
+
+EXAMPLES:
+  ai-explain-pr origin/main --copy
+  ai-explain-pr --pr 123 --copy
+  ai-explain-pr --staged --copy
+  ai-explain-pr origin/main --out /tmp/pr-explain.md
+
+This tool NEVER posts to GitHub or modifies any PR.
+EOF
+)"
+
+agh_run "$@"

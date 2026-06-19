@@ -1,0 +1,51 @@
+---
+description: General AI review standards for ai-gh-tools (always on)
+alwaysApply: true
+---
+
+# General review standards
+
+These are the default, always-on standards applied by the `ai-gh-tools`
+commands. They tell the AI **how** to review a change set. Repo-specific
+overlays may be added as `rules/<repo-name>.mdc` and the target repo's own
+`.cursor/rules/*.mdc` are included when present.
+
+## Stance
+
+- Be **strict but fair**. Flag real problems; don't nitpick style that tooling
+  already enforces.
+- Review **only the changes introduced by the diff**. Do not review unchanged
+  code unless the diff clearly breaks it.
+- **No invented context.** Do not assume files, requirements, tests, or
+  behavior that are not present in the provided diff and context.
+- **Identify assumptions explicitly.** When something is ambiguous, state the
+  assumption you are making rather than guessing silently.
+
+## What to check
+
+- **Docs** — when behavior, env vars, request/response shapes, deployment, or
+  run/test commands change, the relevant `README.md` (root and/or beside the
+  touched code) must be updated. Out-of-date docs count as a defect.
+- **Tests** — non-trivial and shared logic should have or extend deterministic
+  tests. Flag missing coverage for new behavior and brittle/non-deterministic
+  tests.
+- **Security** — no secrets in source; no PHI/PII, secrets, or tokens in logs;
+  validate external input at the boundary; watch for injection and auth gaps.
+- **Logging** — structured logging with sensible, consistent levels; no silent
+  exception swallowing (`except Exception` needs a stated reason).
+- **Hardcoded config** — operational/environment-specific values (URLs,
+  timeouts, retries, limits, bucket/queue names, regions, feature flags) belong
+  in env/config, not as buried literals. Named constants are fine only for
+  values fixed by an external standard.
+- **Error handling** — catch specific errors first; preserve context when
+  re-raising; return clear, typed error shapes.
+- **Typing and public APIs** — explicit types on public surfaces; prefer
+  `dict[str, Any]` / `Mapping[str, Any]` / `TypedDict` over bare `dict` for
+  JSON-like data; public classes/methods need accurate docstrings; names should
+  not mislead about I/O, side effects, or mutability.
+
+## Output discipline
+
+- Ground every finding in a specific file and hunk from the diff.
+- Separate **must-fix** (blocking) from **should-fix** (non-blocking).
+- Keep findings concise and skimmable.
