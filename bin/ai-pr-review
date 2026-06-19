@@ -33,7 +33,7 @@ _LIB_DIR="$(cd "$_BIN_DIR/.." && pwd)/lib"
 
 AGH_PROMPT_NAME="pr-review.md"
 AGH_ALLOW_PR=1
-AGH_USAGE="$(cat <<'EOF'
+read -r -d '' AGH_USAGE <<'EOF' || true
 ai-pr-review — generate a strict multi-agent PR review prompt.
 
 USAGE:
@@ -75,6 +75,5 @@ EXAMPLES:
 
 This tool NEVER posts to GitHub or modifies any PR.
 EOF
-)"
 
 agh_run "$@"
