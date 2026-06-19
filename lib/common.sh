@@ -351,6 +351,11 @@ _agh_build_pr() {
   agh_require_gh
   agh_gh_set_repo "$OPT_REPO"
 
+  # Preflight: fail loudly (not silently) if gh can't fetch the PR.
+  if ! agh_gh_pr_accessible "$OPT_PR"; then
+    agh_die "could not fetch PR '$OPT_PR' via gh. Check: 'gh auth status' (is it the right account for this repo?), your access to the repository, and the PR number/URL/branch. Use --repo OWNER/REPO to target a specific repo. Run 'gh pr view $OPT_PR' to see the underlying error."
+  fi
+
   local repo_root repo_name
   repo_root="$(agh_repo_root)"
   repo_name="$(agh_repo_name)"
@@ -376,11 +381,11 @@ _agh_build_pr() {
     fi
 
     printf '\n## Pull request metadata\n\n'
-    agh_gh_pr_view "$OPT_PR" | sed 's/^/    /'
+    { agh_gh_pr_view "$OPT_PR" | sed 's/^/    /'; } || true
 
     if [ "$OPT_COMMENTS" = "1" ]; then
       printf '\n## Existing PR comments\n\n'
-      agh_gh_pr_comments "$OPT_PR"
+      agh_gh_pr_comments "$OPT_PR" || true
     fi
 
     printf '\n## Changed files\n\n'

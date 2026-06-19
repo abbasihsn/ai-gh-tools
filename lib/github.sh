@@ -27,6 +27,13 @@ agh_gh_set_repo() {
 # which is the portable idiom that stays safe under `set -u` on bash 3.2
 # (macOS default) when the array is empty, without injecting an empty argument.
 
+# True (exit 0) if the PR can actually be fetched with the current gh auth/repo.
+#   $1 = pr ref
+agh_gh_pr_accessible() {
+  local pr="$1"
+  gh pr view "$pr" "${AGH_GH_REPO_ARGS[@]+"${AGH_GH_REPO_ARGS[@]}"}" --json number >/dev/null 2>&1
+}
+
 # Fetch PR metadata as formatted text (title, author, state, branches, body).
 #   $1 = pr ref (number/url/branch)
 agh_gh_pr_view() {
