@@ -5,22 +5,6 @@
 # stdout. The entrypoints concatenate these into a single prompt and then
 # deliver it (stdout / --out / --copy). Nothing here mutates any repo.
 
-# Print a fenced section with a heading. Body comes from stdin.
-#   $1 = heading text
-#   $2 = fence language ("" for no fence)
-agh_section_from_stdin() {
-  local heading="$1"
-  local fence="${2:-}"
-  printf '\n## %s\n\n' "$heading"
-  if [ -n "$fence" ]; then
-    printf '```%s\n' "$fence"
-    cat
-    printf '\n```\n'
-  else
-    cat
-  fi
-}
-
 # Emit the toolkit prompt file (the task instructions for the AI).
 #   $1 = prompt file name under prompts/ (e.g. pr-review.md)
 agh_print_toolkit_prompt() {

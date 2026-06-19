@@ -338,10 +338,12 @@ _agh_build_pr() {
   repo_name="$(agh_repo_name)"
 
   # Gather changed files (filtered by --exclude) into a temp file for READMEs.
+  # Both the changed-file list and the diff are filtered with the same patterns
+  # so excluded paths never leak into the prompt (list, diff, or README lookup).
   local files_tmp diff_tmp
   files_tmp="$(agh_mktemp)"
   diff_tmp="$(agh_mktemp)"
-  agh_gh_pr_changed_files "$OPT_PR" >"$files_tmp" || true
+  agh_gh_pr_changed_files "$OPT_PR" | agh_gh_filter_file_list "${OPT_EXCLUDES[@]+"${OPT_EXCLUDES[@]}"}" >"$files_tmp" || true
   agh_gh_pr_diff "$OPT_PR" | agh_gh_filter_diff "${OPT_EXCLUDES[@]+"${OPT_EXCLUDES[@]}"}" >"$diff_tmp" || true
 
   {

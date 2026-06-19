@@ -68,6 +68,38 @@ agh_gh_pr_comments() {
 {{- end -}}{{- else -}}{{- printf "(no comments)\n" -}}{{- end -}}' 2>/dev/null
 }
 
+# Shared awk snippet: defines glob2rx() and matches(path). Callers populate the
+# `pats[1..n]` array (read from a one-pattern-per-line file in their BEGIN block)
+# and then call matches(). Reading patterns from a file — rather than joining on
+# spaces — keeps patterns that contain spaces intact. Matching is anchored so a
+# pattern only matches a full path or a complete trailing path segment (e.g.
+# `foo` matches `foo` and `a/foo` but not `foobar`).
+_AGH_GLOB_AWK='
+function glob2rx(g,   rx) {
+  rx = g
+  gsub(/[.[\](){}+^$|]/, "\\\\&", rx)
+  gsub(/\*/, ".*", rx)
+  gsub(/\?/, ".", rx)
+  return rx
+}
+function matches(path,   i, rx) {
+  for (i = 1; i <= n; i++) {
+    rx = glob2rx(pats[i])
+    if (path ~ ("^" rx "$") || path ~ ("(^|/)" rx "$")) return 1
+  }
+  return 0
+}
+'
+
+# Write the given patterns (one per line) to a fresh temp file and print its
+# path. The file is registered for cleanup via agh_mktemp.
+_agh_write_pattern_file() {
+  local pat_file
+  pat_file="$(agh_mktemp)"
+  printf '%s\n' "$@" >"$pat_file"
+  printf '%s' "$pat_file"
+}
+
 # Apply exclude patterns to a unified diff coming from gh.
 # Reads the diff on stdin, removes file sections whose path matches any of the
 # provided shell glob patterns. Patterns are passed as remaining args.
@@ -76,21 +108,13 @@ agh_gh_filter_diff() {
     cat
     return 0
   fi
-  awk -v patterns="$*" '
+  local pat_file
+  pat_file="$(_agh_write_pattern_file "$@")"
+  awk -v pf="$pat_file" "$_AGH_GLOB_AWK"'
     BEGIN {
-      n = split(patterns, pats, " ")
-    }
-    function matches(path,   i) {
-      for (i = 1; i <= n; i++) {
-        # Convert glob to a simple match using shell-style fnmatch via gsub.
-        # awk lacks fnmatch; approximate by anchoring and translating * and ?.
-        rx = pats[i]
-        gsub(/[.[\](){}+^$|]/, "\\\\&", rx)
-        gsub(/\*/, ".*", rx)
-        gsub(/\?/, ".", rx)
-        if (path ~ ("(^|/)" rx "$") || path ~ rx) return 1
-      }
-      return 0
+      n = 0
+      while ((getline p < pf) > 0) { if (p != "") pats[++n] = p }
+      close(pf)
     }
     /^diff --git / {
       # Path looks like: diff --git a/foo b/foo
@@ -98,5 +122,25 @@ agh_gh_filter_diff() {
       skip = matches(p)
     }
     { if (!skip) print }
+  '
+}
+
+# Apply the same exclude patterns to a newline-delimited list of file paths on
+# stdin (e.g. the changed-file list), dropping any path that matches a pattern.
+# Keeps the changed-file list consistent with the filtered diff.
+agh_gh_filter_file_list() {
+  if [ "$#" -eq 0 ]; then
+    cat
+    return 0
+  fi
+  local pat_file
+  pat_file="$(_agh_write_pattern_file "$@")"
+  awk -v pf="$pat_file" "$_AGH_GLOB_AWK"'
+    BEGIN {
+      n = 0
+      while ((getline p < pf) > 0) { if (p != "") pats[++n] = p }
+      close(pf)
+    }
+    { if ($0 != "" && !matches($0)) print }
   '
 }

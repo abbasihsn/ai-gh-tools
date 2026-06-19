@@ -51,11 +51,6 @@ agh_git_staged_changed_files() {
   git diff --cached --name-only 2>/dev/null
 }
 
-# True (exit 0) if there are staged changes.
-agh_git_has_staged() {
-  ! git diff --cached --quiet 2>/dev/null
-}
-
 # A short, human-readable description of the base..HEAD range for metadata.
 #   $1 = base ref
 agh_git_range_summary() {

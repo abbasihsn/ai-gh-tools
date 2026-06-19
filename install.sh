@@ -17,6 +17,12 @@ INSTALL_DIR="${AGH_INSTALL_DIR:-$HOME/.local/bin}"
 
 COMMANDS=(ai-pr-review ai-explain-pr ai-draft-pr ai-open-pr)
 
+# Commands removed/renamed in past versions, cleaned up on (re)install so an
+# upgrade doesn't leave dangling symlinks or stale git aliases behind.
+#   - ai-create-pr was renamed to ai-draft-pr.
+OBSOLETE_COMMANDS=(ai-create-pr)
+OBSOLETE_GIT_ALIASES=(ai-create-pr)
+
 info() { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -25,6 +31,16 @@ die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 info "Installing ai-gh-tools from: $REPO_DIR"
 mkdir -p "$INSTALL_DIR"
+
+# 0. Remove obsolete commands left over from earlier installs (renames, etc.).
+for old in "${OBSOLETE_COMMANDS[@]}"; do
+  link="$INSTALL_DIR/$old"
+  # Only remove our own symlink, never a real file the user may have placed.
+  if [ -L "$link" ]; then
+    rm -f "$link"
+    info "  removed obsolete command $link"
+  fi
+done
 
 # 1 + 2. Make sources executable and symlink them into the install dir.
 for cmd in "${COMMANDS[@]}"; do
@@ -87,6 +103,13 @@ if command -v git >/dev/null 2>&1; then
   git config --global alias.ai-draft-pr "!$INSTALL_DIR/ai-draft-pr"
   git config --global alias.ai-open-pr  "!$INSTALL_DIR/ai-open-pr"
   info "  configured git aliases: git ai-review / git ai-explain / git ai-draft-pr / git ai-open-pr"
+  # Drop git aliases for renamed/removed commands.
+  for old_alias in "${OBSOLETE_GIT_ALIASES[@]}"; do
+    if git config --global --get "alias.$old_alias" >/dev/null 2>&1; then
+      git config --global --unset "alias.$old_alias" || true
+      info "  removed obsolete git alias: git $old_alias"
+    fi
+  done
 else
   warn "git not found; skipped git alias setup"
 fi

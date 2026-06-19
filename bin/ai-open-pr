@@ -110,8 +110,16 @@ fi
 BRANCH="$(agh_current_branch)"
 
 # Resolve base ref for the diff, and the base branch name for gh.
+# Strip a leading "<remote>/" for any configured remote (not just origin) so a
+# base like upstream/main or origin/release/1 maps to the right gh --base name.
 BASE_REF="$(agh_resolve_base_ref "$OPT_BASE")"
-BASE_BRANCH="${BASE_REF#origin/}"
+BASE_BRANCH="$BASE_REF"
+for _remote in $(git remote 2>/dev/null); do
+  if [ "${BASE_REF#"$_remote"/}" != "$BASE_REF" ]; then
+    BASE_BRANCH="${BASE_REF#"$_remote"/}"
+    break
+  fi
+done
 if [ "$BRANCH" = "$BASE_BRANCH" ]; then
   agh_die "current branch '$BRANCH' is the base branch; create a feature branch first."
 fi
@@ -188,7 +196,7 @@ agh_info ""
 
 # --- Step 5: push ---------------------------------------------------------
 if [ "$OPT_DRY_RUN" = "1" ]; then
-  agh_info "${DRY}would: git push -u origin $BRANCH"
+  agh_info "${DRY}would: git push -u origin HEAD:$BRANCH"
 else
   if agh_confirm "Push '$BRANCH' to origin?"; then
     git push -u origin "HEAD:$BRANCH"

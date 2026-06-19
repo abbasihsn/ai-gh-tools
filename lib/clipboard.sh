@@ -48,6 +48,10 @@ agh_clipboard_cmd() {
 agh_copy_to_clipboard() {
   local cmd
   if cmd="$(agh_clipboard_cmd)"; then
+    # `cmd` is always one of the fixed literals returned by agh_clipboard_cmd
+    # (e.g. "pbcopy", "xclip -selection clipboard") — never user input — so the
+    # eval below cannot be influenced externally. eval is used only to split the
+    # command and its static args into words. Keep this invariant if editing.
     # shellcheck disable=SC2086
     if eval "$cmd"; then
       agh_info "copied prompt to clipboard (via ${cmd%% *})"
