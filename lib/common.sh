@@ -340,6 +340,9 @@ agh_parse_args() {
   if [ "$OPT_STAGED" = "1" ] && [ -n "$OPT_BASE" ]; then
     agh_die "a base ref ('$OPT_BASE') cannot be combined with --staged."
   fi
+  if [ "${AGH_WITH_SYMBOLS:-}" = "1" ] && [ -n "$OPT_PR" ]; then
+    agh_warn "--symbols has no effect in --pr mode (local/staged only); ignoring it."
+  fi
 }
 
 # Assemble the full prompt for PR mode into the given file.

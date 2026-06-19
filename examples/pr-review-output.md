@@ -1,8 +1,11 @@
 <!--
-Sample output of:  ai-pr-review main
-This is exactly what the tool prints/copies — a single self-contained prompt
+Illustrative sample of:  ai-pr-review main
+Shows the SHAPE of what the tool prints/copies — a single self-contained prompt
 (task instructions + rules + README context + metadata + diff) ready to paste
-into Cursor or another AI tool. Repo paths below are illustrative.
+into Cursor or another AI tool. Repo paths below are illustrative, and the
+embedded prompt/rules text is a snapshot that may lag the live versions in
+prompts/pr-review.md and rules/general.mdc; run `ai-pr-review main` for the
+exact current output.
 -->
 
 # Multi-agent pull request review

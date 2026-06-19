@@ -111,19 +111,27 @@ agh_send_to_cursor() {
     submit_line="keystroke return"
   fi
 
+  # UI automation is timing-sensitive: on a cold/slow Cursor launch the
+  # keystrokes can fire before the window/chat is ready. Allow overriding the
+  # delays via env for slower machines.
+  #   AGH_CURSOR_ACTIVATE_DELAY — wait after activating Cursor (default 0.8s).
+  #   AGH_CURSOR_STEP_DELAY     — wait between keystrokes      (default 0.4s).
+  local activate_delay="${AGH_CURSOR_ACTIVATE_DELAY:-0.8}"
+  local step_delay="${AGH_CURSOR_STEP_DELAY:-0.4}"
+
   # Ordering: activate Cursor -> focus the chat pane (Cmd+L) -> open a NEW chat
   # tab (Cmd+T, a chat-context shortcut that needs the chat focused) -> paste.
   if osascript >/dev/null 2>&1 <<OSA
 tell application "Cursor" to activate
-delay 0.8
+delay $activate_delay
 tell application "System Events"
   tell process "Cursor"
     keystroke "l" using {command down}
-    delay 0.4
+    delay $step_delay
     keystroke "t" using {command down}
-    delay 0.4
+    delay $step_delay
     keystroke "v" using {command down}
-    delay 0.2
+    delay $step_delay
     $submit_line
   end tell
 end tell

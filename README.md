@@ -131,6 +131,11 @@ If the pasted text shows up as a context attachment "pill" instead of as text in
 the input box (Cursor turns code/log clipboards into attachments on Cmd+V), tell
 me and I'll switch the paste to Cmd+Shift+V, which forces it into the input box.
 
+The automation is timing-based, so on a slow/cold Cursor launch the keystrokes
+can fire too early. If pasting is unreliable, increase the delays:
+`AGH_CURSOR_ACTIVATE_DELAY` (wait after activating Cursor, default `0.8`) and
+`AGH_CURSOR_STEP_DELAY` (wait between keystrokes, default `0.4`), both in seconds.
+
 **One-time setup:** macOS will ask to allow your terminal to control the
 computer. If pasting doesn't happen, grant it manually under
 **System Settings → Privacy & Security → Accessibility** and enable your
@@ -283,6 +288,18 @@ ai-gh-tools/
   rules/          # general.mdc + optional rules/<repo-name>.mdc overlays
   templates/      # pr-body.md (the team PR template used by ai-open-pr)
   examples/       # sample generated output
+  tests/          # deterministic unit tests for the shared helpers
   install.sh
   README.md
 ```
+
+## Running the tests
+
+The pure shell helpers (branch humanizing, the `--exclude` glob filters,
+remote-owner parsing) have deterministic unit tests:
+
+```bash
+./tests/test_helpers.sh
+```
+
+It exits non-zero if any assertion fails, so it's CI-friendly.

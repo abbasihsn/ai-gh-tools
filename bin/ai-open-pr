@@ -202,13 +202,21 @@ if [ -n "$OPT_TICKET" ]; then
   esac
 fi
 
+# Qualify the PR head with the push remote's owner (e.g. "fork-owner:branch").
+# gh resolves a bare branch name against the BASE repo, so a cross-fork PR
+# (head on a different owner than base) needs the OWNER: prefix to be found.
+# Falls back to the bare branch when the owner can't be parsed from the remote.
+HEAD_REF="$BRANCH"
+HEAD_OWNER="$(agh_remote_owner "$OPT_REMOTE")"
+[ -n "$HEAD_OWNER" ] && HEAD_REF="$HEAD_OWNER:$BRANCH"
+
 # --- Summary --------------------------------------------------------------
 agh_info ""
 agh_info "${DRY}PR summary:"
 agh_info "  repo:   ${OPT_REPO:-<current>}"
 agh_info "  remote: $OPT_REMOTE"
 agh_info "  base:   $BASE_BRANCH"
-agh_info "  head:   $BRANCH"
+agh_info "  head:   $HEAD_REF"
 agh_info "  ticket: ${OPT_TICKET:-<none>}"
 agh_info "  title:  $TITLE"
 agh_info "  draft:  $([ "$OPT_DRAFT" = 1 ] && echo yes || echo no)"
@@ -231,7 +239,7 @@ fi
 
 # --- Step 6: create the PR ------------------------------------------------
 agh_gh_set_repo "$OPT_REPO"
-GH_ARGS=(pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE")
+GH_ARGS=(pr create --base "$BASE_BRANCH" --head "$HEAD_REF" --title "$TITLE" --body-file "$BODY_FILE")
 [ "$OPT_DRAFT" = "1" ] && GH_ARGS+=(--draft)
 
 if [ "$OPT_DRY_RUN" = "1" ]; then

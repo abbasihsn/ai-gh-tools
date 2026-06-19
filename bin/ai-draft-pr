@@ -26,10 +26,10 @@ _LIB_DIR="$(cd "$_BIN_DIR/.." && pwd)/lib"
 # shellcheck source=/dev/null
 . "$_LIB_DIR/git.sh"
 # shellcheck source=/dev/null
-. "$_LIB_DIR/github.sh"
-# shellcheck source=/dev/null
 . "$_LIB_DIR/context.sh"
 
+# Note: ai-draft-pr is local/staged only (AGH_ALLOW_PR=0), so it never touches
+# `gh` and deliberately does not source lib/github.sh.
 AGH_PROMPT_NAME="pr-draft.md"
 AGH_ALLOW_PR=0
 read -r -d '' AGH_USAGE <<'EOF' || true

@@ -108,10 +108,18 @@ agh_print_readmes() {
 
   # READMEs in the directories of changed files (and their parents up to root).
   if [ -n "$changed_files" ] && [ -f "$changed_files" ]; then
-    local rel dir
+    local rel dir reldir
     while IFS= read -r rel; do
       [ -n "$rel" ] || continue
-      dir="$root/$(dirname "$rel")"
+      # dirname returns "." for a repo-root file; map that to $root directly so
+      # the path matches the root-README entry already in `seen` (otherwise we
+      # would add "$root/./README.md" and print the root README twice).
+      reldir="$(dirname "$rel")"
+      if [ "$reldir" = "." ]; then
+        dir="$root"
+      else
+        dir="$root/$reldir"
+      fi
       # Walk up from the file's dir to the repo root.
       while [ -n "$dir" ] && [ "$dir" != "/" ]; do
         _agh_add_readme "$dir/README.md"

@@ -52,6 +52,26 @@ agh_humanize_branch() {
   printf '%s%s' "$first" "$rest"
 }
 
+# Extract the repo owner from a git remote's URL, supporting both SSH
+# (git@host:OWNER/REPO[.git]) and HTTP(S)/ssh:// (scheme://host/OWNER/REPO[.git])
+# forms. Prints the owner on stdout, or nothing if it can't be parsed.
+#   $1 = remote name
+agh_remote_owner() {
+  local remote="$1" url path
+  url="$(git remote get-url "$remote" 2>/dev/null)" || return 0
+  [ -n "$url" ] || return 0
+  url="${url%.git}"
+  url="${url%/}"
+  case "$url" in
+    *://*) path="${url#*://}"; path="${path#*/}" ;;  # scheme://host/OWNER/REPO
+    *:*)   path="${url##*:}" ;;                        # git@host:OWNER/REPO
+    *)     path="$url" ;;
+  esac
+  case "$path" in
+    */*) printf '%s' "${path%%/*}" ;;
+  esac
+}
+
 # Derive a default PR title: the single commit subject if exactly one commit is
 # ahead of base, otherwise a humanized branch name.
 #   $1 = base ref, $2 = branch
