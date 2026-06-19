@@ -36,10 +36,11 @@ If the change has a non-trivial flow or affects architecture, include a
 useful). Use a fenced ```mermaid block. Only skip it if the change is genuinely
 too trivial to diagram — in that case write "Diagram: N/A (trivial change)".
 
-## Reviewer roles
+## Reviewer perspectives (internal — do NOT output a per-role section)
 
-Run each role in turn. For every role, give concrete findings (with severity +
-file/line) or explicitly say "no issues found".
+Review the change through each perspective below, but **do not print a
+role-by-role findings dump**. Fold every finding into the "Reviewer-ready
+comments" section, and tag each comment with the perspective it came from.
 
 1. **Architecture reviewer** — module boundaries, responsibilities, coupling,
    reuse vs. copy-paste, placement of shared logic, naming of public APIs.
@@ -79,23 +80,33 @@ Tag **every** issue and every review comment with one of:
 
 ## Required output sections
 
+Keep it simple and useful. Explain every issue in plain English: what is wrong
+and what it causes. No fancy words, no filler.
+
 1. **Summary** — 2–4 sentences: what this PR does and your overall verdict.
 2. **Diagram** — the Mermaid diagram from above (or "N/A (trivial change)").
-3. **Findings by role** — for each role, a bulleted list. Each finding:
-   `[severity] path:line — issue` and a one-line "why it matters". Reference the
-   broken rule when applicable.
-4. **Merge risk** — `low` / `medium` / `high` with a one-line justification.
-5. **Must-fix items** — numbered list of the `[high]` (and critical `[medium]`)
-   items. Empty if none.
-6. **Reviewer-ready GitHub comments** — the deliverable I will actually use. For
-   **each** comment, output this exact structure:
+3. **Merge risk** — `low` / `medium` / `high` with a one-line reason.
+4. **Must-fix items** — the blocking issues (`[high]` and critical `[medium]`),
+   each referencing its comment number from section 5 (e.g. "see #1") and its
+   `path:line`. Empty if none.
+5. **Reviewer-ready comments** — the main deliverable, and the ONLY place
+   findings appear (no separate per-role section). List every finding as a
+   **numbered** comment (1, 2, 3, …) so each can be referenced in discussion,
+   ordered by severity (high → low). Start each comment with its number and a
+   short title, e.g. `### 1. [high] Unused series_key field`. For EACH comment
+   use exactly this structure:
 
-   - **Call site:** `path:line` (or `path` + hunk anchor)
-   - **Severity:** [high|medium|low]
-   - **Human comment:** a friendly, concise, first-person comment written exactly
-     the way a real reviewer types in GitHub — this is what I will copy/paste
-     into the PR. No preamble, ready to paste. Suggest the concrete change.
-   - **AI note:** the deeper technical rationale — root cause, references to the
-     rule/standard, edge cases, and a suggested fix or code snippet.
+   - **Agent:** which perspective it came from (Architecture / Correctness /
+     Typing / Logging-Security / Config-DevOps / Testing / Docs / Code-quality).
+   - **Call site:** `path:line` — the real file path and the **actual line
+     number** from the diff so it is clickable in GitHub. Use the post-change
+     line number for added/changed lines; use a range `path:start-end` if it
+     spans lines. Never point at just a symbol name without a line number.
+   - **Severity:** [high|medium|low].
+   - **Comment:** paste-ready for GitHub, first-person, plain English. Say what
+     the bug is and **what it causes** (the concrete consequence), then the fix.
+     Short and direct — no preamble, no fancy words.
+   - **Details:** one or two lines of technical rationale — root cause, the rule
+     it breaks, and a concrete fix/snippet.
 
-Keep everything concise and skimmable. Prefer bullet points over prose.
+Prefer bullet points over prose throughout.
