@@ -237,6 +237,7 @@ agh_reset_opts() {
   OPT_INCLUDE_WT=0
   OPT_CURSOR=0
   AGH_CURSOR_SUBMIT=0
+  OPT_TICKET=""
   OPT_EXCLUDES=()
   # Context toggles are exported as env-style flags read by context.sh.
   AGH_NO_PROJECT_RULES=""
@@ -288,6 +289,11 @@ agh_parse_args() {
         OPT_CURSOR=1; shift ;;
       --cursor-submit)
         OPT_CURSOR=1; AGH_CURSOR_SUBMIT=1; shift ;;
+      --ticket)
+        [ "$#" -ge 2 ] || agh_die "--ticket requires a value (e.g. PROJ-123)."
+        OPT_TICKET="$2"; shift 2 ;;
+      --ticket=*)
+        OPT_TICKET="${1#*=}"; shift ;;
       --no-project-rules)
         AGH_NO_PROJECT_RULES=1; shift ;;
       --no-tool-rules)
@@ -359,6 +365,10 @@ _agh_build_pr() {
     agh_print_readmes "$repo_root" "$files_tmp"
     agh_print_repo_metadata "$repo_root" "$repo_name"
 
+    if [ -n "$OPT_TICKET" ]; then
+      printf '\n## Ticket\n\n- %s\n' "$OPT_TICKET"
+    fi
+
     printf '\n## Pull request metadata\n\n'
     agh_gh_pr_view "$OPT_PR" | sed 's/^/    /'
 
@@ -410,6 +420,10 @@ _agh_build_local() {
     agh_print_project_rules "$repo_root"
     agh_print_readmes "$repo_root" "$files_tmp"
     agh_print_repo_metadata "$repo_root" "$repo_name"
+
+    if [ -n "$OPT_TICKET" ]; then
+      printf '\n## Ticket\n\n- %s\n' "$OPT_TICKET"
+    fi
 
     if [ "$OPT_STAGED" = "1" ]; then
       agh_print_staged_metadata

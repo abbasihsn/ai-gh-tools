@@ -49,6 +49,8 @@ BEHAVIOR:
 OPTIONS:
   -m, --message MSG   Commit message for uncommitted changes.
   --title TITLE       PR title (default: derived from commit/branch).
+  --ticket ID         Ticket id (e.g. PROJ-123); prefixes the title as [ID] and
+                      fills "Related Issue" in the PR body.
   --body-file FILE    Use FILE as the PR body (e.g. an AI-filled template from
                       `ai-draft-pr`). Default: templates/pr-body.md, pre-filled
                       with the changed-file list.
@@ -64,6 +66,7 @@ OPTIONS:
 EXAMPLES:
   ai-open-pr origin/main
   ai-open-pr origin/main -m "Add fast resize" --draft
+  ai-open-pr origin/main --ticket PROJ-123
   ai-open-pr --body-file /tmp/pr-body.md --yes
 
 This command DOES modify your repo and GitHub. Review the summary it prints.
@@ -73,6 +76,7 @@ EOF
 OPT_BASE=""
 OPT_MSG=""
 OPT_TITLE=""
+OPT_TICKET=""
 OPT_BODY_FILE=""
 OPT_DRAFT=0
 OPT_NO_EDIT=0
@@ -88,6 +92,8 @@ while [ "$#" -gt 0 ]; do
     --message=*) OPT_MSG="${1#*=}"; shift ;;
     --title) [ "$#" -ge 2 ] || agh_die "--title requires a value."; OPT_TITLE="$2"; shift 2 ;;
     --title=*) OPT_TITLE="${1#*=}"; shift ;;
+    --ticket) [ "$#" -ge 2 ] || agh_die "--ticket requires a value."; OPT_TICKET="$2"; shift 2 ;;
+    --ticket=*) OPT_TICKET="${1#*=}"; shift ;;
     --body-file) [ "$#" -ge 2 ] || agh_die "--body-file requires a value."; OPT_BODY_FILE="$2"; shift 2 ;;
     --body-file=*) OPT_BODY_FILE="${1#*=}"; shift ;;
     --draft) OPT_DRAFT=1; shift ;;
@@ -175,7 +181,7 @@ if [ -z "$BODY_FILE" ]; then
   TEMPLATE="$_ROOT_DIR/templates/pr-body.md"
   [ -f "$TEMPLATE" ] || agh_die "PR template not found at $TEMPLATE"
   BODY_FILE="$(agh_mktemp)"
-  agh_prefill_body "$TEMPLATE" "$BASE_REF" "$BODY_FILE"
+  agh_prefill_body "$TEMPLATE" "$BASE_REF" "$BODY_FILE" "$OPT_TICKET"
   if [ "$OPT_DRY_RUN" != "1" ] && [ "$OPT_NO_EDIT" != "1" ] && [ "$AGH_ASSUME_YES" != "1" ] && [ -t 0 ]; then
     agh_info "Opening the PR body in your editor for review..."
     agh_edit_file "$BODY_FILE"
@@ -188,6 +194,13 @@ fi
 TITLE="$OPT_TITLE"
 [ -n "$TITLE" ] || TITLE="$(agh_default_pr_title "$BASE_REF" "$BRANCH")"
 [ -n "$TITLE" ] || TITLE="$(agh_humanize_branch "$BRANCH")"
+# Prefix the ticket as [TICKET] unless the title already references it.
+if [ -n "$OPT_TICKET" ]; then
+  case "$TITLE" in
+    *"$OPT_TICKET"*) : ;;
+    *) TITLE="[$OPT_TICKET] $TITLE" ;;
+  esac
+fi
 
 # --- Summary --------------------------------------------------------------
 agh_info ""
@@ -196,6 +209,7 @@ agh_info "  repo:   ${OPT_REPO:-<current>}"
 agh_info "  remote: $OPT_REMOTE"
 agh_info "  base:   $BASE_BRANCH"
 agh_info "  head:   $BRANCH"
+agh_info "  ticket: ${OPT_TICKET:-<none>}"
 agh_info "  title:  $TITLE"
 agh_info "  draft:  $([ "$OPT_DRAFT" = 1 ] && echo yes || echo no)"
 agh_info "  body:   $BODY_FILE"

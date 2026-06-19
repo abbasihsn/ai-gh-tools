@@ -85,9 +85,10 @@ agh_default_commit_message() {
 # Append a git-derived "Changes Introduced" hint into a copy of the template,
 # so even a non-AI body has the real change list. Reads template path, writes a
 # new body file path on stdout.
-#   $1 = template file, $2 = base ref (or "" for staged), $3 = out file
+#   $1 = template file, $2 = base ref (or "" for staged), $3 = out file,
+#   $4 = ticket (optional)
 agh_prefill_body() {
-  local template="$1" base="$2" out="$3"
+  local template="$1" base="$2" out="$3" ticket="${4:-}"
   # Write the changed-file list to a temp file. We must NOT pass multi-line
   # content via `awk -v` (it errors with "newline in string"), so awk reads it
   # back with getline instead.
@@ -98,9 +99,14 @@ agh_prefill_body() {
   else
     git diff --cached --name-status 2>/dev/null | sed 's/^/- /' >"$changes_file"
   fi
-  # Insert the file list right under the "### Changes Introduced" heading.
-  awk -v cf="$changes_file" '
+  # Insert the changed-file list under "### Changes Introduced", and the ticket
+  # under "### Related Issue" when provided. (ticket is single-line, safe via -v.)
+  awk -v cf="$changes_file" -v ticket="$ticket" '
     { print }
+    /^### Related Issue/ && ticket != "" {
+      print ""
+      print "- " ticket
+    }
     /^### Changes Introduced$/ {
       print ""
       print "<!-- auto-filled from the diff; edit as needed -->"

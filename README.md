@@ -100,6 +100,7 @@ These apply to the read-only prompt commands (`ai-pr-review`, `ai-explain-pr`,
 | `--staged`               | review, explain, draft | Use staged changes                          |
 | `--include-working-tree` | review, explain, draft | Also include unstaged changes (local mode)  |
 | `--exclude PATTERN`      | review, explain      | Drop matching files from a PR diff (repeat)   |
+| `--ticket ID`            | draft (& open-pr)    | Ticket id; adds `[ID]` to the title/description |
 | `--copy`                 | review, explain, draft | Copy prompt to clipboard                    |
 | `--cursor`               | review, explain, draft | Copy, then open Cursor and paste into chat (macOS) |
 | `--cursor-submit`        | review, explain, draft | Like `--cursor`, but also presses Return to send |
@@ -193,6 +194,7 @@ Useful flags:
 
 ```bash
 ai-open-pr origin/main -m "Add fast resize" --title "Add fast resize" --draft
+ai-open-pr origin/main --ticket PROJ-123  # title becomes "[PROJ-123] ...", fills Related Issue
 ai-open-pr origin/main --dry-run        # show the plan, change nothing
 ai-open-pr origin/main --yes            # non-interactive: skip all prompts
 ai-open-pr --body-file /tmp/pr-body.md  # use an AI-filled body from ai-draft-pr

@@ -45,6 +45,8 @@ MODES:
   --staged            Use staged changes (git diff --cached).
 
 OPTIONS:
+  --ticket ID         Ticket id (e.g. PROJ-123); the AI puts [ID] in the title
+                      and description.
   --copy              Copy the generated prompt to the clipboard.
   --cursor            Copy, then open a new Cursor chat tab and paste (macOS).
   --cursor-submit     Like --cursor, but also press Return to send it.
