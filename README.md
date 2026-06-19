@@ -101,11 +101,34 @@ These apply to the read-only prompt commands (`ai-pr-review`, `ai-explain-pr`,
 | `--include-working-tree` | review, explain, draft | Also include unstaged changes (local mode)  |
 | `--exclude PATTERN`      | review, explain      | Drop matching files from a PR diff (repeat)   |
 | `--copy`                 | review, explain, draft | Copy prompt to clipboard                    |
+| `--cursor`               | review, explain, draft | Copy, then open Cursor and paste into chat (macOS) |
+| `--cursor-submit`        | review, explain, draft | Like `--cursor`, but also presses Return to send |
 | `--out FILE`             | review, explain, draft | Write prompt to a file                      |
 | `--no-project-rules`     | review, explain, draft | Skip the target repo's `.cursor/rules`      |
 | `--no-tool-rules`        | review, explain, draft | Skip this toolkit's rules                   |
 | `--no-readmes`           | review, explain, draft | Skip README context                         |
 | `-h`, `--help`           | all                  | Show help                                     |
+
+### Send a prompt straight into Cursor (macOS)
+
+Instead of `--copy` + manual paste, use `--cursor` to copy the prompt and have it
+opened and pasted into the Cursor chat automatically:
+
+```bash
+ai-pr-review --pr 123 --comments --cursor
+ai-explain-pr origin/main --cursor
+ai-draft-pr origin/main --cursor-submit   # also presses Return to send it
+```
+
+How it works: it copies the prompt, then uses AppleScript (`osascript`) to
+activate Cursor, open the chat (Cmd+L), and paste (Cmd+V). It never sends your
+code anywhere itself — it just drives the Cursor app on your machine.
+
+**One-time setup:** macOS will ask to allow your terminal to control the
+computer. If pasting doesn't happen, grant it manually under
+**System Settings → Privacy & Security → Accessibility** and enable your
+terminal app (Terminal/iTerm) or Cursor's integrated terminal. On non-macOS, or
+if anything fails, the prompt is still left on your clipboard to paste manually.
 
 ## How to review my own PR
 

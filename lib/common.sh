@@ -235,6 +235,8 @@ agh_reset_opts() {
   OPT_OUT=""
   OPT_STAGED=0
   OPT_INCLUDE_WT=0
+  OPT_CURSOR=0
+  AGH_CURSOR_SUBMIT=0
   OPT_EXCLUDES=()
   # Context toggles are exported as env-style flags read by context.sh.
   AGH_NO_PROJECT_RULES=""
@@ -282,6 +284,10 @@ agh_parse_args() {
         OPT_STAGED=1; shift ;;
       --include-working-tree)
         OPT_INCLUDE_WT=1; shift ;;
+      --cursor)
+        OPT_CURSOR=1; shift ;;
+      --cursor-submit)
+        OPT_CURSOR=1; AGH_CURSOR_SUBMIT=1; shift ;;
       --no-project-rules)
         AGH_NO_PROJECT_RULES=1; shift ;;
       --no-tool-rules)
@@ -459,5 +465,14 @@ agh_run() {
     _agh_build_local "$out"
   fi
 
-  agh_deliver_output "$out" "$OPT_OUT" "$OPT_COPY"
+  if [ "$OPT_CURSOR" = "1" ]; then
+    # Optionally still honor --out, then hand the prompt to Cursor.
+    if [ -n "$OPT_OUT" ]; then
+      cp "$out" "$OPT_OUT" || agh_die "failed to write output to '$OPT_OUT'."
+      agh_info "wrote prompt to $OPT_OUT"
+    fi
+    agh_send_to_cursor "$out"
+  else
+    agh_deliver_output "$out" "$OPT_OUT" "$OPT_COPY"
+  fi
 }
