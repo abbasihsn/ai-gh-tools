@@ -58,7 +58,12 @@ chmod +x "$REPO_DIR"/lib/*.sh 2>/dev/null || true
 ensure_path() {
   local rc="$1"
   [ -f "$rc" ] || return 0
-  if grep -Fq "$INSTALL_DIR" "$rc" 2>/dev/null; then
+  # Match INSTALL_DIR only as a whole path segment, so e.g. ".local/bin" does
+  # not falsely match an existing ".local/bin2" entry. Escape regex-special
+  # characters in the path before anchoring it to a boundary.
+  local esc
+  esc="$(printf '%s' "$INSTALL_DIR" | sed 's/[][\\.^$*+?(){}|]/\\&/g')"
+  if grep -Eq "(^|[:\"' =])${esc}([:\"' ]|\$)" "$rc" 2>/dev/null; then
     return 0
   fi
   {

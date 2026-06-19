@@ -100,7 +100,7 @@ These apply to the read-only prompt commands (`ai-pr-review`, `ai-explain-pr`,
 | `--staged`               | review, explain, draft | Use staged changes                          |
 | `--include-working-tree` | review, explain, draft | Also include unstaged changes (local mode)  |
 | `--exclude PATTERN`      | review, explain      | Drop matching files from a PR diff (repeat)   |
-| `--ticket ID`            | draft (& open-pr)    | Ticket id; adds `[ID]` to the title/description |
+| `--ticket ID`            | review, explain, draft (& open-pr) | Ticket id; adds a `## Ticket` context block (and `[ID]` to drafted titles) |
 | `--copy`                 | review, explain, draft | Copy prompt to clipboard                    |
 | `--cursor`               | review, explain, draft | Copy, then open Cursor and paste into chat (macOS) |
 | `--cursor-submit`        | review, explain, draft | Like `--cursor`, but also presses Return to send |
@@ -158,6 +158,13 @@ ai-pr-review --pr 123 --repo owner/other-repo --copy
 
 This uses `gh pr view` / `gh pr diff` (read-only) to fetch the PR. With
 `--comments`, existing discussion is included as context for the AI.
+
+> **Note:** `--pr` mode must still be run from inside a git repo, and the
+> toolkit rules, project `.cursor/rules`, README context, and repo metadata are
+> taken from your **local** working directory — not from the PR's repo. When
+> reviewing a PR for a repo you don't have checked out, run the command from a
+> checkout of that repo (or pass `--no-project-rules` / `--no-readmes`) so
+> unrelated local context doesn't leak into the prompt.
 
 ## How to draft a PR description (read-only)
 

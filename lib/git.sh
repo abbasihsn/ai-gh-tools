@@ -57,7 +57,7 @@ agh_git_range_summary() {
   local base="$1"
   local mb
   mb="$(agh_git_merge_base "$base")"
-  local ahead behind
+  local ahead
   ahead="$(git rev-list --count "${base}..HEAD" 2>/dev/null || echo '?')"
   printf 'base=%s merge-base=%s commits-ahead=%s' \
     "$base" "${mb:0:12}" "$ahead"
