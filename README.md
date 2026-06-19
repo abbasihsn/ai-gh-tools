@@ -183,7 +183,8 @@ What it does, in order (confirming before each mutating step):
 
 1. **Commits** any uncommitted changes (`git add -A` + `git commit`). Provide the
    message with `-m "..."`, or you'll be prompted, or it auto-generates one.
-2. **Pushes** the current branch (`git push -u origin HEAD`).
+2. **Pushes** the current branch to the push remote (`git push -u origin HEAD`
+   by default; override with `--remote NAME` for fork workflows).
 3. **Opens** the PR against the base with `gh pr create`, using the team template
    as the body (pre-filled with the changed-file list). Your `$EDITOR` opens so
    you can edit the body first.
@@ -196,6 +197,7 @@ ai-open-pr origin/main --dry-run        # show the plan, change nothing
 ai-open-pr origin/main --yes            # non-interactive: skip all prompts
 ai-open-pr --body-file /tmp/pr-body.md  # use an AI-filled body from ai-draft-pr
 ai-open-pr origin/main --no-edit        # don't open the editor for the body
+ai-open-pr upstream/main --remote fork  # base on upstream, push to your 'fork' remote
 ```
 
 Combined flow (AI-written body, then open the PR):

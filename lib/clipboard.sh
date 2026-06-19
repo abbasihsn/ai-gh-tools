@@ -43,6 +43,20 @@ agh_clipboard_cmd() {
   return 1
 }
 
+# Low-level clipboard put: copy stdin to the clipboard with no fallback and no
+# logging. Returns 0 only if a clipboard command exists AND succeeded; non-zero
+# otherwise. Callers that need to know whether the clipboard actually received
+# the content (e.g. agh_send_to_cursor) should use this instead of
+# agh_copy_to_clipboard, which always returns 0 because it falls back to stdout.
+_agh_clipboard_put() {
+  local cmd
+  cmd="$(agh_clipboard_cmd)" || return 1
+  # `cmd` is one of the fixed literals from agh_clipboard_cmd (never user input);
+  # eval only splits the command and its static args into words.
+  # shellcheck disable=SC2086
+  eval "$cmd"
+}
+
 # Copy stdin to the clipboard. Falls back to printing to stdout with a
 # warning when no clipboard command is available.
 agh_copy_to_clipboard() {
@@ -73,15 +87,22 @@ agh_copy_to_clipboard() {
 agh_send_to_cursor() {
   local file="$1"
 
-  # Always make sure the prompt is on the clipboard first.
-  agh_copy_to_clipboard <"$file" >/dev/null 2>&1 || true
+  # Try to put the prompt on the clipboard, tracking whether it actually
+  # worked so we don't tell the user it's on the clipboard when it isn't (e.g.
+  # a headless box with no pbcopy/xclip/wl-copy).
+  local clip_hint
+  if _agh_clipboard_put <"$file" >/dev/null 2>&1; then
+    clip_hint="the prompt is on your clipboard"
+  else
+    clip_hint="no clipboard tool was found, so the prompt is NOT on your clipboard — re-run with --out FILE to save it"
+  fi
 
   if [ "$(uname -s)" != "Darwin" ]; then
-    agh_warn "--cursor auto-paste is macOS-only; prompt is on your clipboard — paste into Cursor with Ctrl/Cmd+V."
+    agh_warn "--cursor auto-paste is macOS-only; $clip_hint."
     return 0
   fi
   if ! command -v osascript >/dev/null 2>&1; then
-    agh_warn "osascript not found; prompt is on your clipboard — paste into Cursor manually."
+    agh_warn "osascript not found; $clip_hint."
     return 0
   fi
 
@@ -110,7 +131,7 @@ OSA
   then
     agh_info "opened Cursor and pasted the prompt into the chat."
   else
-    agh_warn "couldn't drive Cursor automatically — the prompt is on your clipboard (just Cmd+V)."
+    agh_warn "couldn't drive Cursor automatically — $clip_hint (paste with Cmd+V if so)."
     agh_warn "If this keeps failing, grant Accessibility permission to your terminal app:"
     agh_warn "  System Settings > Privacy & Security > Accessibility > enable your terminal."
   fi

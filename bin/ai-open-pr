@@ -2,8 +2,9 @@
 # ai-open-pr — commit pending work, push the branch, and OPEN a GitHub PR.
 #
 # WARNING: unlike the other ai-gh-tools commands, this one MODIFIES state:
-# it can `git add -A` + `git commit`, `git push -u origin <branch>`, and
-# `gh pr create`. Each mutation is confirmed (unless --yes) and skipped in
+# it can `git add -A` + `git commit`, `git push -u <remote> <branch>` (remote
+# defaults to origin), and `gh pr create`. Each mutation is confirmed (unless
+# --yes) and skipped in
 # --dry-run. It uses the team PR template (templates/pr-body.md) for the body.
 set -euo pipefail
 
@@ -40,7 +41,7 @@ USAGE:
 BEHAVIOR:
   1. If the working tree has uncommitted changes, stage all (git add -A) and
      commit them (message via -m, or you are prompted, or auto-generated).
-  2. Push the current branch to origin (git push -u origin HEAD).
+  2. Push the current branch to the push remote (default origin; see --remote).
   3. Open a PR against BASE using the team PR template as the body.
 
   BASE_REF defaults to an auto-detected base (origin/main, main, develop, ...).
@@ -53,6 +54,8 @@ OPTIONS:
                       with the changed-file list.
   --draft             Open the PR as a draft.
   --no-edit           Do not open an editor to review the PR body first.
+  --remote NAME       Remote to push the branch to (default: origin). Useful in
+                      a fork workflow where your writable remote is not origin.
   -y, --yes           Do not prompt; assume yes (non-interactive).
   --dry-run           Show what would happen; make no commits/pushes/PR.
   --repo OWNER/REPO   Target repo override passed to gh.
@@ -75,6 +78,7 @@ OPT_DRAFT=0
 OPT_NO_EDIT=0
 OPT_DRY_RUN=0
 OPT_REPO=""
+OPT_REMOTE="origin"
 AGH_ASSUME_YES=0
 
 while [ "$#" -gt 0 ]; do
@@ -88,6 +92,8 @@ while [ "$#" -gt 0 ]; do
     --body-file=*) OPT_BODY_FILE="${1#*=}"; shift ;;
     --draft) OPT_DRAFT=1; shift ;;
     --no-edit) OPT_NO_EDIT=1; shift ;;
+    --remote) [ "$#" -ge 2 ] || agh_die "--remote requires a value."; OPT_REMOTE="$2"; shift 2 ;;
+    --remote=*) OPT_REMOTE="${1#*=}"; shift ;;
     -y|--yes) AGH_ASSUME_YES=1; shift ;;
     --dry-run) OPT_DRY_RUN=1; shift ;;
     --repo) [ "$#" -ge 2 ] || agh_die "--repo requires a value."; OPT_REPO="$2"; shift 2 ;;
@@ -187,6 +193,7 @@ TITLE="$OPT_TITLE"
 agh_info ""
 agh_info "${DRY}PR summary:"
 agh_info "  repo:   ${OPT_REPO:-<current>}"
+agh_info "  remote: $OPT_REMOTE"
 agh_info "  base:   $BASE_BRANCH"
 agh_info "  head:   $BRANCH"
 agh_info "  title:  $TITLE"
@@ -196,10 +203,13 @@ agh_info ""
 
 # --- Step 5: push ---------------------------------------------------------
 if [ "$OPT_DRY_RUN" = "1" ]; then
-  agh_info "${DRY}would: git push -u origin HEAD:$BRANCH"
+  agh_info "${DRY}would: git push -u $OPT_REMOTE HEAD:$BRANCH"
 else
-  if agh_confirm "Push '$BRANCH' to origin?"; then
-    git push -u origin "HEAD:$BRANCH"
+  if ! git remote get-url "$OPT_REMOTE" >/dev/null 2>&1; then
+    agh_die "push remote '$OPT_REMOTE' not found. Configure it or pass --remote NAME."
+  fi
+  if agh_confirm "Push '$BRANCH' to '$OPT_REMOTE'?"; then
+    git push -u "$OPT_REMOTE" "HEAD:$BRANCH"
   else
     agh_die "aborted before push."
   fi

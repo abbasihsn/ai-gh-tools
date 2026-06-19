@@ -118,6 +118,8 @@ agh_gh_filter_diff() {
     }
     /^diff --git / {
       # Path looks like: diff --git a/foo b/foo
+      # Note: $3 is the first whitespace-delimited token, so paths containing
+      # spaces are not matched precisely here (rare for excludable paths).
       p = $3; sub(/^a\//, "", p)
       skip = matches(p)
     }
