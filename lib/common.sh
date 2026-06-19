@@ -369,6 +369,11 @@ _agh_build_pr() {
   agh_gh_pr_changed_files "$OPT_PR" | agh_gh_filter_file_list "${OPT_EXCLUDES[@]+"${OPT_EXCLUDES[@]}"}" >"$files_tmp" || true
   agh_gh_pr_diff "$OPT_PR" | agh_gh_filter_diff "${OPT_EXCLUDES[@]+"${OPT_EXCLUDES[@]}"}" >"$diff_tmp" || true
 
+  if [ ! -s "$diff_tmp" ]; then
+    agh_warn "PR '$OPT_PR' returned an EMPTY diff via gh. Verify with: gh pr diff $OPT_PR"
+    agh_warn "(possible causes: wrong PR number, PR has no changes, SSO scope — try 'gh auth refresh', or an old gh version)."
+  fi
+
   {
     agh_print_toolkit_prompt "$AGH_PROMPT_NAME"
     agh_print_toolkit_rules "$repo_name"
