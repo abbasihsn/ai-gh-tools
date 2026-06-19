@@ -60,6 +60,10 @@ OPTIONS:
   --no-project-rules  Skip the target repo's .cursor/rules.
   --no-tool-rules     Skip this toolkit's rules.
   --no-readmes        Skip README context.
+  --symbols           Embed an inventory of the repo's existing definitions
+                      (local/staged mode) as a duplication/reuse fallback for
+                      non-agentic AI tools. In Cursor, prefer letting the AI
+                      explore the codebase itself; off by default.
   -h, --help          Show this help.
 
 EXAMPLES:

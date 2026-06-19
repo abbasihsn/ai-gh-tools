@@ -243,6 +243,7 @@ agh_reset_opts() {
   AGH_NO_PROJECT_RULES=""
   AGH_NO_TOOL_RULES=""
   AGH_NO_READMES=""
+  AGH_WITH_SYMBOLS=""
 }
 
 agh_print_usage() {
@@ -300,6 +301,8 @@ agh_parse_args() {
         AGH_NO_TOOL_RULES=1; shift ;;
       --no-readmes)
         AGH_NO_READMES=1; shift ;;
+      --symbols)
+        AGH_WITH_SYMBOLS=1; shift ;;
       --exclude)
         [ "$AGH_ALLOW_PR" = "1" ] || agh_die "this command does not support --exclude."
         [ "$#" -ge 2 ] || agh_die "--exclude requires a PATTERN value."
@@ -322,7 +325,7 @@ agh_parse_args() {
     esac
   done
 
-  export AGH_NO_PROJECT_RULES AGH_NO_TOOL_RULES AGH_NO_READMES
+  export AGH_NO_PROJECT_RULES AGH_NO_TOOL_RULES AGH_NO_READMES AGH_WITH_SYMBOLS
 
   # Cross-flag validation.
   if [ "$OPT_COMMENTS" = "1" ] && [ -z "$OPT_PR" ]; then
@@ -448,6 +451,8 @@ _agh_build_local() {
       printf '\n## Diff stat\n\n'
       printf '```\n%s\n```\n' "$stat"
     fi
+
+    agh_print_symbol_inventory "$repo_root"
 
     printf '\n## Full diff\n\n'
     printf '```diff\n'

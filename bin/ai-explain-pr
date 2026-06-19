@@ -57,6 +57,8 @@ OPTIONS:
   --no-project-rules  Skip the target repo's .cursor/rules.
   --no-tool-rules     Skip this toolkit's rules.
   --no-readmes        Skip README context.
+  --symbols           Embed the repo's existing-definitions inventory (local/
+                      staged mode; off by default).
   -h, --help          Show this help.
 
 EXAMPLES:

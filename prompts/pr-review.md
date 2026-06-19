@@ -17,6 +17,17 @@ If no rules sections are present, say so and fall back to general best practice.
 Also use the README context, repository metadata, changed files, and the full
 diff. Ground every finding in a specific file and line/hunk from the diff.
 
+## Use the codebase if you can (preferred)
+
+If you are running inside a tool that has access to this repository (e.g.
+Cursor), **actively explore the codebase** — grep and semantic-search the base
+branch / `main` for existing helpers, classes, and patterns. This is the best way
+to catch duplication and reuse opportunities: before flagging new code as novel,
+confirm whether an equivalent already exists, and read its body to judge real
+(not just name-level) duplication. Cite any existing `path:line` you reference.
+If you do **not** have codebase access, rely on the provided context only (an
+optional "Existing definitions" section may be included as a fallback).
+
 ## Architecture / flow diagram (when meaningful)
 
 If the change has a non-trivial flow or affects architecture, include a
@@ -48,6 +59,14 @@ file/line) or explicitly say "no issues found".
 7. **Documentation / README reviewer** — when behavior, env vars, request/
    response shape, deployment, or run/test commands change, are the relevant
    `README.md` files (root and/or beside the touched code) updated?
+8. **Code quality / reuse reviewer** — cohesion (logic that should be a class
+   method/`@classmethod`/`@staticmethod` instead of a free function), duplication
+   vs. reuse of an existing equivalent helper (use/extend it, don't copy-paste),
+   **generic context-free helpers** (no leaking caller/business context, globals,
+   or config into a `*_utils` helper), magic values, dead/commented-out code and
+   unused imports, function size/complexity (prefer early returns over deep
+   nesting), naming conventions, minimal public surface, and consistency with
+   existing patterns in the touched area.
 
 ## Severity scale
 

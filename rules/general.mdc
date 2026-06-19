@@ -44,6 +44,41 @@ overlays may be added as `rules/<repo-name>.mdc` and the target repo's own
   JSON-like data; public classes/methods need accurate docstrings; names should
   not mislead about I/O, side effects, or mutability.
 
+## Code quality, reuse, and structure
+
+- **Cohesion / class methods** — behavior that operates on a type's own data
+  belongs **on that class** (method / `@classmethod` / `@staticmethod`), not as a
+  free function that takes the object and reaches into its internals. Flag
+  logic that should be a method, and over-stuffed classes that should be split.
+- **No duplication — reuse what exists** — before adding a function or class,
+  check for an existing equivalent (same module, `shared/`, `*_utils`). If
+  similar/same logic already exists, **use or extend it** instead of duplicating.
+  Flag copy-pasted blocks and near-duplicates; suggest extracting to a shared
+  location with a neutral name. When an **"Existing definitions"** section is
+  provided below, cross-check new functions/classes against it and call out any
+  that duplicate something already in the repo (cite the existing `path:line`).
+- **Naming specifics** — names should read clearly at the call site. Prefer
+  boolean names like `is_valid` / `is_success` / `has_*` over bare nouns; avoid
+  over-generic identifiers (`data`, `result`, `tmp`, `valid`, `obj`, `info`) when
+  a more specific name is accurate. Names must not suggest the wrong concept.
+- **Generic, context-free helpers (no context leak)** — helpers and `*_utils`
+  must describe a **technical** operation (parse/format/normalize/validate) and
+  take **only the parameters they need**. They must NOT reach into caller or
+  business context, globals, request/session state, or config singletons.
+  Business rules belong in handlers/domain modules, not in generic helpers.
+- **Magic values** — no unexplained literals; use named constants/enums (or
+  config/env for tunables, per the rule above).
+- **Dead code** — no commented-out code, unused imports/vars/params, or
+  unreachable branches in the diff.
+- **Complexity & size** — flag functions doing too much, deep nesting (prefer
+  early returns/guard clauses), and overly long functions; one clear
+  responsibility per unit.
+- **Consistency** — follow existing patterns/conventions in the touched area
+  rather than introducing a new style for the same problem.
+- **Encapsulation** — keep the public surface minimal; non-public helpers should
+  be underscore-prefixed (Python) or otherwise scoped; avoid premature/over-
+  abstraction with no second caller.
+
 ## Output discipline
 
 - Ground every finding in a specific file and hunk from the diff.

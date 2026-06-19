@@ -108,6 +108,7 @@ These apply to the read-only prompt commands (`ai-pr-review`, `ai-explain-pr`,
 | `--no-project-rules`     | review, explain, draft | Skip the target repo's `.cursor/rules`      |
 | `--no-tool-rules`        | review, explain, draft | Skip this toolkit's rules                   |
 | `--no-readmes`           | review, explain, draft | Skip README context                         |
+| `--symbols`              | review, explain, draft | Embed existing-definitions inventory (dup/reuse fallback for non-agentic tools; local mode) |
 | `-h`, `--help`           | all                  | Show help                                     |
 
 ### Send a prompt straight into Cursor (macOS)
@@ -158,6 +159,20 @@ ai-pr-review --pr 123 --repo owner/other-repo --copy
 
 This uses `gh pr view` / `gh pr diff` (read-only) to fetch the PR. With
 `--comments`, existing discussion is included as context for the AI.
+
+### Duplication / reuse checks
+
+The review prompt asks the AI to look for code that duplicates something already
+in the repo. There are two ways it can do that:
+
+1. **Preferred (Cursor):** the prompt instructs the AI to explore the codebase
+   itself — grep/semantic-search the base branch for existing helpers and read
+   their bodies. This catches *semantic* duplication, not just matching names.
+   Just paste into Cursor with the repo open; no flag needed.
+2. **Fallback (other AI tools):** add `--symbols` to embed a compact inventory of
+   the repo's existing function/class/method **signatures** in the prompt, so a
+   tool without codebase access still has something to compare against. Capped at
+   500 lines (raise with `AGH_SYMBOLS_CAP`); local/staged mode only.
 
 > **Note:** `--pr` mode must still be run from inside a git repo, and the
 > toolkit rules, project `.cursor/rules`, README context, and repo metadata are

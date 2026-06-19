@@ -164,3 +164,43 @@ agh_print_staged_metadata() {
   printf -- '- mode: staged changes (git diff --cached)\n'
   printf -- '- branch: %s\n' "$(agh_current_branch)"
 }
+
+# Inventory of existing function/class/method definitions across the repo, so a
+# reviewer can detect duplication against code that is NOT in the diff (i.e. what
+# already exists on the base/main). Local checkout is the source of truth, so
+# this is only meaningful in local/staged mode.
+#   $1 = repo root
+#   Opt-in: only runs when AGH_WITH_SYMBOLS=1 (the --symbols flag). It's a
+#   fallback for non-agentic AI tools; in Cursor, prefer letting the AI explore
+#   the codebase directly. AGH_SYMBOLS_CAP caps the number of lines.
+agh_print_symbol_inventory() {
+  local root="${1:-}"
+  [ "${AGH_WITH_SYMBOLS:-}" = "1" ] || return 0
+  [ -z "$root" ] && return 0
+  command -v git >/dev/null 2>&1 || return 0
+
+  local cap="${AGH_SYMBOLS_CAP:-500}"
+  # Definition-like lines across common languages (captures methods via the
+  # leading-whitespace allowance, e.g. `def` inside a class).
+  local pattern='^[[:space:]]*(export[[:space:]]+)?(public[[:space:]]+|private[[:space:]]+)?(async[[:space:]]+)?(def|class|func|function|module|interface|type|struct|trait|enum)[[:space:]]+[A-Za-z_]'
+
+  local tmp
+  tmp="$(agh_mktemp)"
+  ( cd "$root" && git grep -nE "$pattern" -- \
+      '*.py' '*.pyi' '*.js' '*.jsx' '*.ts' '*.tsx' '*.go' '*.rb' '*.rs' \
+      '*.java' '*.kt' '*.cs' '*.php' '*.scala' '*.swift' 2>/dev/null ) >"$tmp" || true
+  [ -s "$tmp" ] || return 0
+
+  local total
+  total="$(wc -l <"$tmp" | tr -d ' ')"
+  printf '\n## Existing definitions (for duplication / reuse checks)\n\n'
+  printf 'Functions/classes/methods already present in the repository (not '
+  printf 'necessarily in this diff). Cross-check new code against these and flag '
+  printf 'anything that duplicates an existing equivalent (cite its path:line).\n\n'
+  printf '```\n'
+  head -n "$cap" "$tmp"
+  if [ "$total" -gt "$cap" ]; then
+    printf '... (%s more definitions truncated; raise AGH_SYMBOLS_CAP to see more)\n' "$((total - cap))"
+  fi
+  printf '```\n'
+}
