@@ -27,6 +27,25 @@ agh_gh_set_repo() {
 # which is the portable idiom that stays safe under `set -u` on bash 3.2
 # (macOS default) when the array is empty, without injecting an empty argument.
 
+# The GitHub login gh is currently authenticated as (empty if not logged in).
+agh_gh_current_user() {
+  gh api user --jq .login 2>/dev/null
+}
+
+# Print the gh identity + the target repo to stderr, for error context.
+# Reads OPT_REPO (override) or falls back to the origin remote URL.
+agh_gh_print_identity() {
+  local who repo
+  who="$(agh_gh_current_user)"
+  if [ -n "${OPT_REPO:-}" ]; then
+    repo="$OPT_REPO"
+  else
+    repo="$(git config --get remote.origin.url 2>/dev/null)"
+  fi
+  agh_err "  gh authenticated as : ${who:-<not logged in>}"
+  agh_err "  target repo         : ${repo:-<unknown>}"
+}
+
 # True (exit 0) if the PR can actually be fetched with the current gh auth/repo.
 #   $1 = pr ref
 agh_gh_pr_accessible() {

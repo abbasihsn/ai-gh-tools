@@ -351,9 +351,16 @@ _agh_build_pr() {
   agh_require_gh
   agh_gh_set_repo "$OPT_REPO"
 
-  # Preflight: fail loudly (not silently) if gh can't fetch the PR.
+  # Preflight: fail loudly (not silently) if gh can't fetch the PR, and report
+  # WHO gh is acting as and WHICH repo it resolved — the usual culprit is gh
+  # being logged in as the wrong account, or org SSO not being authorized.
   if ! agh_gh_pr_accessible "$OPT_PR"; then
-    agh_die "could not fetch PR '$OPT_PR' via gh. Check: 'gh auth status' (is it the right account for this repo?), your access to the repository, and the PR number/URL/branch. Use --repo OWNER/REPO to target a specific repo. Run 'gh pr view $OPT_PR' to see the underlying error."
+    agh_err "could not fetch PR '$OPT_PR' via gh."
+    agh_gh_print_identity
+    agh_err "Likely that account can't access this repo (wrong account or org SSO not authorized)."
+    agh_err "Fix: 'gh auth status' · 'gh auth switch' / 'gh auth login' (right account) · 'gh auth refresh' (authorize org SSO)."
+    agh_err "Then verify with: gh pr view $OPT_PR"
+    exit 1
   fi
 
   local repo_root repo_name
@@ -370,8 +377,11 @@ _agh_build_pr() {
   agh_gh_pr_diff "$OPT_PR" | agh_gh_filter_diff "${OPT_EXCLUDES[@]+"${OPT_EXCLUDES[@]}"}" >"$diff_tmp" || true
 
   if [ ! -s "$diff_tmp" ]; then
-    agh_warn "PR '$OPT_PR' returned an EMPTY diff via gh. Verify with: gh pr diff $OPT_PR"
-    agh_warn "(possible causes: wrong PR number, PR has no changes, SSO scope — try 'gh auth refresh', or an old gh version)."
+    agh_err "PR '$OPT_PR' returned an EMPTY diff via gh — nothing to review; aborting (no prompt generated)."
+    agh_gh_print_identity
+    agh_err "Verify with: gh pr diff $OPT_PR"
+    agh_err "If this PR should have changes, it's likely org SSO scope ('gh auth refresh') or the wrong gh account ('gh auth switch'); or double-check the PR number."
+    exit 1
   fi
 
   {
