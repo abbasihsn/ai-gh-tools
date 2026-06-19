@@ -88,19 +88,24 @@ agh_default_commit_message() {
 #   $1 = template file, $2 = base ref (or "" for staged), $3 = out file
 agh_prefill_body() {
   local template="$1" base="$2" out="$3"
-  local changes
+  # Write the changed-file list to a temp file. We must NOT pass multi-line
+  # content via `awk -v` (it errors with "newline in string"), so awk reads it
+  # back with getline instead.
+  local changes_file
+  changes_file="$(agh_mktemp)"
   if [ -n "$base" ]; then
-    changes="$(git diff --name-status "${base}...HEAD" 2>/dev/null | sed 's/^/- /')"
+    git diff --name-status "${base}...HEAD" 2>/dev/null | sed 's/^/- /' >"$changes_file"
   else
-    changes="$(git diff --cached --name-status 2>/dev/null | sed 's/^/- /')"
+    git diff --cached --name-status 2>/dev/null | sed 's/^/- /' >"$changes_file"
   fi
   # Insert the file list right under the "### Changes Introduced" heading.
-  awk -v changes="$changes" '
+  awk -v cf="$changes_file" '
     { print }
     /^### Changes Introduced$/ {
       print ""
       print "<!-- auto-filled from the diff; edit as needed -->"
-      print changes
+      while ((getline line < cf) > 0) print line
+      close(cf)
     }
   ' "$template" >"$out"
 }
