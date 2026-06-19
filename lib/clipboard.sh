@@ -90,15 +90,21 @@ agh_send_to_cursor() {
     submit_line="keystroke return"
   fi
 
+  # Ordering: activate Cursor -> focus the chat pane (Cmd+L) -> open a NEW chat
+  # tab (Cmd+T, a chat-context shortcut that needs the chat focused) -> paste.
   if osascript >/dev/null 2>&1 <<OSA
 tell application "Cursor" to activate
 delay 0.8
 tell application "System Events"
-  keystroke "l" using {command down}
-  delay 0.4
-  keystroke "v" using {command down}
-  delay 0.2
-  $submit_line
+  tell process "Cursor"
+    keystroke "l" using {command down}
+    delay 0.4
+    keystroke "t" using {command down}
+    delay 0.4
+    keystroke "v" using {command down}
+    delay 0.2
+    $submit_line
+  end tell
 end tell
 OSA
   then

@@ -121,8 +121,13 @@ ai-draft-pr origin/main --cursor-submit   # also presses Return to send it
 ```
 
 How it works: it copies the prompt, then uses AppleScript (`osascript`) to
-activate Cursor, open the chat (Cmd+L), and paste (Cmd+V). It never sends your
-code anywhere itself — it just drives the Cursor app on your machine.
+activate Cursor, focus the chat (Cmd+L), open a **new chat tab** (Cmd+T), and
+paste (Cmd+V). It never sends your code anywhere itself — it just drives the
+Cursor app on your machine.
+
+If the pasted text shows up as a context attachment "pill" instead of as text in
+the input box (Cursor turns code/log clipboards into attachments on Cmd+V), tell
+me and I'll switch the paste to Cmd+Shift+V, which forces it into the input box.
 
 **One-time setup:** macOS will ask to allow your terminal to control the
 computer. If pasting doesn't happen, grant it manually under

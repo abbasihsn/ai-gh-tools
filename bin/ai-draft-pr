@@ -46,7 +46,7 @@ MODES:
 
 OPTIONS:
   --copy              Copy the generated prompt to the clipboard.
-  --cursor            Copy, then open Cursor and paste into the chat (macOS).
+  --cursor            Copy, then open a new Cursor chat tab and paste (macOS).
   --cursor-submit     Like --cursor, but also press Return to send it.
   --out FILE          Write the generated prompt to FILE.
   --include-working-tree
