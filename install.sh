@@ -15,7 +15,7 @@ REPO_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 BIN_SRC="$REPO_DIR/bin"
 INSTALL_DIR="${AGH_INSTALL_DIR:-$HOME/.local/bin}"
 
-COMMANDS=(ai-pr-review ai-explain-pr ai-draft-pr ai-open-pr)
+COMMANDS=(ai-gh ai-pr-review ai-explain-pr ai-draft-pr ai-open-pr)
 
 # Commands removed/renamed in past versions, cleaned up on (re)install so an
 # upgrade doesn't leave dangling symlinks or stale git aliases behind.
@@ -103,11 +103,12 @@ esac
 
 # 4. Create git aliases (global, user-level).
 if command -v git >/dev/null 2>&1; then
+  git config --global alias.ai-gh       "!$INSTALL_DIR/ai-gh"
   git config --global alias.ai-review   "!$INSTALL_DIR/ai-pr-review"
   git config --global alias.ai-explain  "!$INSTALL_DIR/ai-explain-pr"
   git config --global alias.ai-draft-pr "!$INSTALL_DIR/ai-draft-pr"
   git config --global alias.ai-open-pr  "!$INSTALL_DIR/ai-open-pr"
-  info "  configured git aliases: git ai-review / git ai-explain / git ai-draft-pr / git ai-open-pr"
+  info "  configured git aliases: git ai-gh / git ai-review / git ai-explain / git ai-draft-pr / git ai-open-pr"
   # Drop git aliases for renamed/removed commands.
   for old_alias in "${OBSOLETE_GIT_ALIASES[@]}"; do
     if git config --global --get "alias.$old_alias" >/dev/null 2>&1; then
@@ -125,6 +126,7 @@ cat <<EOF
 ai-gh-tools installed.
 
 Commands:
+  ai-gh           Umbrella + cheat sheet (ai-gh help, ai-gh review ...)
   ai-pr-review    Strict multi-agent PR review prompt   (read-only)
   ai-explain-pr   Plain-English explanation prompt      (read-only)
   ai-draft-pr     PR title + description prompt          (read-only)

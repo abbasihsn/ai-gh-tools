@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# ai-gh — umbrella entry point for the ai-gh-tools commands.
+#
+# Prints a cheat sheet, and dispatches subcommands to the individual tools:
+#   ai-gh review  -> ai-pr-review     ai-gh draft -> ai-draft-pr
+#   ai-gh explain -> ai-explain-pr    ai-gh open  -> ai-open-pr
+set -euo pipefail
+
+# Resolve this script's real directory (following symlinks) to find siblings.
+_resolve_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+_BIN_DIR="$(_resolve_dir)"
+
+usage() {
+  cat <<'EOF'
+ai-gh — local AI helpers for GitHub/repo work (no posting; read-only except open).
+
+USAGE:
+  ai-gh <command> [options]
+  ai-gh help | -h | --help
+
+COMMANDS:
+  review    Strict multi-agent PR review prompt    -> ai-pr-review    [read-only]
+  explain   Plain-English explanation prompt       -> ai-explain-pr   [read-only]
+  draft     Draft a PR title + description prompt   -> ai-draft-pr     [read-only]
+  open      Commit, push, and OPEN a GitHub PR      -> ai-open-pr      [writes!]
+
+COMMON FLAGS (review / explain / draft):
+  --copy            Copy the prompt to the clipboard
+  --cursor          Open a new Cursor chat tab and paste (macOS)
+  --cursor-submit   ...and press Return to send it
+  --out FILE        Write the prompt to a file
+  --pr REF          Review/explain a GitHub PR by number, URL, or branch
+  --comments        Include existing PR comments (with --pr)
+  --staged          Use staged changes
+  --ticket ID       Ticket id -> [ID] in title/description (draft / open)
+  --symbols         Embed existing-definitions inventory (duplication fallback)
+
+EXAMPLES:
+  ai-gh review origin/main --copy
+  ai-gh review --pr 123 --comments --cursor
+  ai-gh explain --staged --copy
+  ai-gh draft origin/main --ticket PROJ-123 --copy
+  ai-gh open origin/main --ticket PROJ-123 --dry-run
+
+Run 'ai-gh <command> --help' for the full options of each command.
+Read-only: review / explain / draft. Writes to git + GitHub: open.
+EOF
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  ""|-h|--help|help)
+    usage; exit 0 ;;
+  review|pr-review|ai-pr-review)
+    shift; exec "$_BIN_DIR/ai-pr-review" "$@" ;;
+  explain|explain-pr|ai-explain-pr)
+    shift; exec "$_BIN_DIR/ai-explain-pr" "$@" ;;
+  draft|draft-pr|ai-draft-pr)
+    shift; exec "$_BIN_DIR/ai-draft-pr" "$@" ;;
+  open|open-pr|ai-open-pr)
+    shift; exec "$_BIN_DIR/ai-open-pr" "$@" ;;
+  *)
+    printf "ai-gh: unknown command '%s'. Try: ai-gh help\n" "$cmd" >&2
+    exit 1 ;;
+esac

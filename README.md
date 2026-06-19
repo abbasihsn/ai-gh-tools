@@ -16,10 +16,14 @@ and hands you a single prompt to paste into your AI tool of choice. One command,
 
 | Command         | Purpose                                              | Modifies anything? |
 | --------------- | ---------------------------------------------------- | ------------------ |
+| `ai-gh`         | Umbrella + cheat sheet; dispatches to the others     | No                 |
 | `ai-pr-review`  | Strict multi-agent code review prompt                | No (read-only)     |
 | `ai-explain-pr` | Plain-English explanation of a change set            | No (read-only)     |
 | `ai-draft-pr`   | Drafts a PR title + description (fills team template) | No (read-only)     |
 | `ai-open-pr`    | Commits, pushes, and **opens** a GitHub PR           | **Yes**            |
+
+`ai-gh` is the easiest entry point — run `ai-gh help` for a cheat sheet, or use
+it as a dispatcher: `ai-gh review --pr 123 --copy`, `ai-gh open origin/main`, etc.
 
 The read-only commands can work from:
 
@@ -46,8 +50,8 @@ cd ai-gh-tools
 - symlink the commands into `~/.local/bin`,
 - make them executable,
 - add `~/.local/bin` to your `PATH` (in `.zshrc` or `.bashrc`) if missing,
-- create git aliases (`git ai-review`, `git ai-explain`, `git ai-draft-pr`,
-  `git ai-open-pr`).
+- create git aliases (`git ai-gh`, `git ai-review`, `git ai-explain`,
+  `git ai-draft-pr`, `git ai-open-pr`).
 
 Open a new shell (or `source ~/.zshrc`) afterwards.
 
