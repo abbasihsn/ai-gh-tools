@@ -1,0 +1,8 @@
+# Scratch capture files from manual runs / redirects
+out.txt
+err.txt
+*.log
+
+# Editor / OS noise
+.DS_Store
+*.swp

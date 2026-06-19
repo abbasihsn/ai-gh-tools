@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# ai-draft-pr — draft a clean GitHub PR title + description from a change set.
+#
+# Local/staged only. Read-only: never opens a PR, posts comments, or pushes.
+# It produces a prompt you paste into an AI tool; the AI fills the team PR
+# template (templates/pr-body.md). To actually open the PR, use ai-open-pr.
+set -euo pipefail
+
+_resolve_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+_BIN_DIR="$(_resolve_dir)"
+_LIB_DIR="$(cd "$_BIN_DIR/.." && pwd)/lib"
+
+# shellcheck source=/dev/null
+. "$_LIB_DIR/common.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/clipboard.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/git.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/context.sh"
+
+# Note: ai-draft-pr is local/staged only (AGH_ALLOW_PR=0), so it never touches
+# `gh` and deliberately does not source lib/github.sh.
+AGH_PROMPT_NAME="pr-draft.md"
+AGH_ALLOW_PR=0
+read -r -d '' AGH_USAGE <<'EOF' || true
+ai-draft-pr — draft a GitHub PR title + description prompt from a change set.
+
+USAGE:
+  ai-draft-pr [BASE_REF] [options]
+  ai-draft-pr --staged [options]
+
+MODES:
+  BASE_REF            Use local branch changes (git diff BASE...HEAD).
+                      Defaults to auto-detected base if omitted.
+  --staged            Use staged changes (git diff --cached).
+
+OPTIONS:
+  --ticket ID         Ticket id (e.g. PROJ-123); the AI puts [ID] in the title
+                      and description.
+  --copy              Copy the generated prompt to the clipboard.
+  --cursor            Copy, then open a new Cursor chat tab and paste (macOS).
+  --cursor-submit     Like --cursor, but also press Return to send it.
+  --out FILE          Write the generated prompt to FILE.
+  --include-working-tree
+                      Also include unstaged local changes (local mode).
+  --no-project-rules  Skip the target repo's .cursor/rules.
+  --no-tool-rules     Skip this toolkit's rules.
+  --no-readmes        Skip README context.
+  --symbols           Embed the repo's existing-definitions inventory (local/
+                      staged mode; off by default).
+  -h, --help          Show this help.
+
+EXAMPLES:
+  ai-draft-pr origin/main --copy
+  ai-draft-pr --staged --copy
+  ai-draft-pr origin/main --out /tmp/pr-description.md
+
+This tool only generates a prompt; it NEVER opens a PR or modifies GitHub.
+To actually create the PR, use: ai-open-pr
+EOF
+
+agh_run "$@"

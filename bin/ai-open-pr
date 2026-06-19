@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+# ai-open-pr — commit pending work, push the branch, and OPEN a GitHub PR.
+#
+# WARNING: unlike the other ai-gh-tools commands, this one MODIFIES state:
+# it can `git add -A` + `git commit`, `git push -u <remote> <branch>` (remote
+# defaults to origin), and `gh pr create`. Each mutation is confirmed (unless
+# --yes) and skipped in
+# --dry-run. It uses the team PR template (templates/pr-body.md) for the body.
+set -euo pipefail
+
+_resolve_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+_BIN_DIR="$(_resolve_dir)"
+_ROOT_DIR="$(cd "$_BIN_DIR/.." && pwd)"
+_LIB_DIR="$_ROOT_DIR/lib"
+
+# shellcheck source=/dev/null
+. "$_LIB_DIR/common.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/git.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/github.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/submit.sh"
+
+usage() {
+  cat <<'EOF'
+ai-open-pr — commit pending work, push the branch, and open a GitHub PR.
+
+USAGE:
+  ai-open-pr [BASE_REF] [options]
+
+BEHAVIOR:
+  1. If the working tree has uncommitted changes, stage all (git add -A) and
+     commit them (message via -m, or you are prompted, or auto-generated).
+  2. Push the current branch to the push remote (default origin; see --remote).
+  3. Open a PR against BASE using the team PR template as the body.
+
+  BASE_REF defaults to an auto-detected base (origin/main, main, develop, ...).
+
+OPTIONS:
+  -m, --message MSG   Commit message for uncommitted changes.
+  --title TITLE       PR title (default: derived from commit/branch).
+  --ticket ID         Ticket id (e.g. PROJ-123); prefixes the title as [ID] and
+                      fills "Related Issue" in the PR body.
+  --body-file FILE    Use FILE as the PR body (e.g. an AI-filled template from
+                      `ai-draft-pr`). Default: templates/pr-body.md, pre-filled
+                      with the changed-file list.
+  --draft             Open the PR as a draft.
+  --no-edit           Do not open an editor to review the PR body first.
+  --remote NAME       Remote to push the branch to (default: origin). Useful in
+                      a fork workflow where your writable remote is not origin.
+  -y, --yes           Do not prompt; assume yes (non-interactive).
+  --dry-run           Show what would happen; make no commits/pushes/PR.
+  --repo OWNER/REPO   Target repo override passed to gh.
+  -h, --help          Show this help.
+
+EXAMPLES:
+  ai-open-pr origin/main
+  ai-open-pr origin/main -m "Add fast resize" --draft
+  ai-open-pr origin/main --ticket PROJ-123
+  ai-open-pr --body-file /tmp/pr-body.md --yes
+
+This command DOES modify your repo and GitHub. Review the summary it prints.
+EOF
+}
+
+OPT_BASE=""
+OPT_MSG=""
+OPT_TITLE=""
+OPT_TICKET=""
+OPT_BODY_FILE=""
+OPT_DRAFT=0
+OPT_NO_EDIT=0
+OPT_DRY_RUN=0
+OPT_REPO=""
+OPT_REMOTE="origin"
+AGH_ASSUME_YES=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -m|--message) [ "$#" -ge 2 ] || agh_die "-m requires a value."; OPT_MSG="$2"; shift 2 ;;
+    --message=*) OPT_MSG="${1#*=}"; shift ;;
+    --title) [ "$#" -ge 2 ] || agh_die "--title requires a value."; OPT_TITLE="$2"; shift 2 ;;
+    --title=*) OPT_TITLE="${1#*=}"; shift ;;
+    --ticket) [ "$#" -ge 2 ] || agh_die "--ticket requires a value."; OPT_TICKET="$2"; shift 2 ;;
+    --ticket=*) OPT_TICKET="${1#*=}"; shift ;;
+    --body-file) [ "$#" -ge 2 ] || agh_die "--body-file requires a value."; OPT_BODY_FILE="$2"; shift 2 ;;
+    --body-file=*) OPT_BODY_FILE="${1#*=}"; shift ;;
+    --draft) OPT_DRAFT=1; shift ;;
+    --no-edit) OPT_NO_EDIT=1; shift ;;
+    --remote) [ "$#" -ge 2 ] || agh_die "--remote requires a value."; OPT_REMOTE="$2"; shift 2 ;;
+    --remote=*) OPT_REMOTE="${1#*=}"; shift ;;
+    -y|--yes) AGH_ASSUME_YES=1; shift ;;
+    --dry-run) OPT_DRY_RUN=1; shift ;;
+    --repo) [ "$#" -ge 2 ] || agh_die "--repo requires a value."; OPT_REPO="$2"; shift 2 ;;
+    --repo=*) OPT_REPO="${1#*=}"; shift ;;
+    --) shift; while [ "$#" -gt 0 ]; do OPT_BASE="$1"; shift; done ;;
+    -*) agh_die "unknown option '$1'. Use -h for help." ;;
+    *) [ -z "$OPT_BASE" ] || agh_die "unexpected extra argument '$1'."; OPT_BASE="$1"; shift ;;
+  esac
+done
+export AGH_ASSUME_YES
+
+agh_install_cleanup_trap
+agh_require_git_repo
+agh_require_gh
+
+# Determine current branch; refuse detached HEAD.
+if ! git symbolic-ref -q HEAD >/dev/null 2>&1; then
+  agh_die "detached HEAD; check out a branch before opening a PR."
+fi
+BRANCH="$(agh_current_branch)"
+
+# Resolve base ref for the diff, and the base branch name for gh.
+# Strip a leading "<remote>/" for any configured remote (not just origin) so a
+# base like upstream/main or origin/release/1 maps to the right gh --base name.
+BASE_REF="$(agh_resolve_base_ref "$OPT_BASE")"
+BASE_BRANCH="$BASE_REF"
+for _remote in $(git remote 2>/dev/null); do
+  if [ "${BASE_REF#"$_remote"/}" != "$BASE_REF" ]; then
+    BASE_BRANCH="${BASE_REF#"$_remote"/}"
+    break
+  fi
+done
+if [ "$BRANCH" = "$BASE_BRANCH" ]; then
+  agh_die "current branch '$BRANCH' is the base branch; create a feature branch first."
+fi
+
+DRY=""
+[ "$OPT_DRY_RUN" = "1" ] && DRY="[dry-run] "
+
+# --- Step 1: commit pending changes ---------------------------------------
+if agh_has_uncommitted; then
+  agh_info "${DRY}Uncommitted changes detected; they will be staged and committed."
+  if [ "$OPT_DRY_RUN" = "1" ]; then
+    agh_info "${DRY}would: git add -A"
+    agh_info "${DRY}would: git commit -m \"${OPT_MSG:-<your message / auto-generated>}\""
+  else
+    git add -A
+    COMMIT_MSG="$OPT_MSG"
+    if [ -z "$COMMIT_MSG" ]; then
+      if [ "$AGH_ASSUME_YES" = "1" ] || [ ! -t 0 ]; then
+        COMMIT_MSG="$(agh_default_commit_message)"
+      else
+        printf 'Commit message (blank = auto): ' >&2
+        read -r COMMIT_MSG
+        [ -n "$COMMIT_MSG" ] || COMMIT_MSG="$(agh_default_commit_message)"
+      fi
+    fi
+    [ -n "$COMMIT_MSG" ] || COMMIT_MSG="Update changes on $BRANCH"
+    if agh_confirm "Commit all changes with message: \"$COMMIT_MSG\"?"; then
+      git commit -m "$COMMIT_MSG" >/dev/null
+      agh_info "committed: $COMMIT_MSG"
+    else
+      agh_die "aborted before commit."
+    fi
+  fi
+else
+  agh_info "${DRY}Working tree clean; nothing to commit."
+fi
+
+# --- Step 2: ensure there is something to open a PR for --------------------
+AHEAD="$(git rev-list --count "${BASE_REF}..HEAD" 2>/dev/null || echo 0)"
+if [ "$OPT_DRY_RUN" != "1" ] && [ "$AHEAD" = "0" ]; then
+  agh_die "no commits ahead of '$BASE_REF'; nothing to open a PR for."
+fi
+
+# --- Step 3: build the PR body --------------------------------------------
+BODY_FILE="$OPT_BODY_FILE"
+if [ -z "$BODY_FILE" ]; then
+  TEMPLATE="$_ROOT_DIR/templates/pr-body.md"
+  [ -f "$TEMPLATE" ] || agh_die "PR template not found at $TEMPLATE"
+  BODY_FILE="$(agh_mktemp)"
+  agh_prefill_body "$TEMPLATE" "$BASE_REF" "$BODY_FILE" "$OPT_TICKET"
+  if [ "$OPT_DRY_RUN" != "1" ] && [ "$OPT_NO_EDIT" != "1" ] && [ "$AGH_ASSUME_YES" != "1" ] && [ -t 0 ]; then
+    agh_info "Opening the PR body in your editor for review..."
+    agh_edit_file "$BODY_FILE"
+  fi
+else
+  [ -f "$BODY_FILE" ] || agh_die "--body-file '$BODY_FILE' does not exist."
+fi
+
+# --- Step 4: title --------------------------------------------------------
+TITLE="$OPT_TITLE"
+[ -n "$TITLE" ] || TITLE="$(agh_default_pr_title "$BASE_REF" "$BRANCH")"
+[ -n "$TITLE" ] || TITLE="$(agh_humanize_branch "$BRANCH")"
+# Prefix the ticket as [TICKET] unless the title already references it.
+if [ -n "$OPT_TICKET" ]; then
+  case "$TITLE" in
+    *"$OPT_TICKET"*) : ;;
+    *) TITLE="[$OPT_TICKET] $TITLE" ;;
+  esac
+fi
+
+# Qualify the PR head with the push remote's owner (e.g. "fork-owner:branch").
+# gh resolves a bare branch name against the BASE repo, so a cross-fork PR
+# (head on a different owner than base) needs the OWNER: prefix to be found.
+# Falls back to the bare branch when the owner can't be parsed from the remote.
+HEAD_REF="$BRANCH"
+HEAD_OWNER="$(agh_remote_owner "$OPT_REMOTE")"
+[ -n "$HEAD_OWNER" ] && HEAD_REF="$HEAD_OWNER:$BRANCH"
+
+# --- Summary --------------------------------------------------------------
+agh_info ""
+agh_info "${DRY}PR summary:"
+agh_info "  repo:   ${OPT_REPO:-<current>}"
+agh_info "  remote: $OPT_REMOTE"
+agh_info "  base:   $BASE_BRANCH"
+agh_info "  head:   $HEAD_REF"
+agh_info "  ticket: ${OPT_TICKET:-<none>}"
+agh_info "  title:  $TITLE"
+agh_info "  draft:  $([ "$OPT_DRAFT" = 1 ] && echo yes || echo no)"
+agh_info "  body:   $BODY_FILE"
+agh_info ""
+
+# --- Step 5: push ---------------------------------------------------------
+if [ "$OPT_DRY_RUN" = "1" ]; then
+  agh_info "${DRY}would: git push -u $OPT_REMOTE HEAD:$BRANCH"
+else
+  if ! git remote get-url "$OPT_REMOTE" >/dev/null 2>&1; then
+    agh_die "push remote '$OPT_REMOTE' not found. Configure it or pass --remote NAME."
+  fi
+  if agh_confirm "Push '$BRANCH' to '$OPT_REMOTE'?"; then
+    git push -u "$OPT_REMOTE" "HEAD:$BRANCH"
+  else
+    agh_die "aborted before push."
+  fi
+fi
+
+# --- Step 6: create the PR ------------------------------------------------
+agh_gh_set_repo "$OPT_REPO"
+GH_ARGS=(pr create --base "$BASE_BRANCH" --head "$HEAD_REF" --title "$TITLE" --body-file "$BODY_FILE")
+[ "$OPT_DRAFT" = "1" ] && GH_ARGS+=(--draft)
+
+if [ "$OPT_DRY_RUN" = "1" ]; then
+  agh_info "${DRY}would: gh ${GH_ARGS[*]} ${AGH_GH_REPO_ARGS[*]:-}"
+  agh_info "${DRY}done (no changes were made)."
+  exit 0
+fi
+
+if agh_confirm "Create the pull request now?"; then
+  gh "${GH_ARGS[@]}" "${AGH_GH_REPO_ARGS[@]+"${AGH_GH_REPO_ARGS[@]}"}"
+else
+  agh_die "aborted before creating the PR. (Branch is pushed; you can open it manually.)"
+fi
