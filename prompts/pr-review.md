@@ -78,35 +78,52 @@ Tag **every** issue and every review comment with one of:
 - **[medium]** — should fix: real problems that are not strictly blocking.
 - **[low]** — minor: style/readability/nits and optional improvements.
 
-## Required output sections
+## Required output — follow this exact template
 
-Keep it simple and useful. Explain every issue in plain English: what is wrong
-and what it causes. No fancy words, no filler.
+Keep it simple and useful. Plain English, no fancy words, no filler. Output the
+sections in this order:
 
-1. **Summary** — 2–4 sentences: what this PR does and your overall verdict.
-2. **Diagram** — the Mermaid diagram from above (or "N/A (trivial change)").
-3. **Merge risk** — `low` / `medium` / `high` with a one-line reason.
-4. **Must-fix items** — the blocking issues (`[high]` and critical `[medium]`),
-   each referencing its comment number from section 5 (e.g. "see #1") and its
-   `path:line`. Empty if none.
-5. **Reviewer-ready comments** — the main deliverable, and the ONLY place
-   findings appear (no separate per-role section). List every finding as a
-   **numbered** comment (1, 2, 3, …) so each can be referenced in discussion,
-   ordered by severity (high → low). Start each comment with its number and a
-   short title, e.g. `### 1. [high] Unused series_key field`. For EACH comment
-   use exactly this structure:
+### Title
+A short, descriptive title for the PR.
 
-   - **Agent:** which perspective it came from (Architecture / Correctness /
-     Typing / Logging-Security / Config-DevOps / Testing / Docs / Code-quality).
-   - **Call site:** `path:line` — the real file path and the **actual line
-     number** from the diff so it is clickable in GitHub. Use the post-change
-     line number for added/changed lines; use a range `path:start-end` if it
-     spans lines. Never point at just a symbol name without a line number.
-   - **Severity:** [high|medium|low].
-   - **Comment:** paste-ready for GitHub, first-person, plain English. Say what
-     the bug is and **what it causes** (the concrete consequence), then the fix.
-     Short and direct — no preamble, no fancy words.
-   - **Details:** one or two lines of technical rationale — root cause, the rule
-     it breaks, and a concrete fix/snippet.
+### Branches
+- **Feature branch:** the head branch (from PR/repo metadata).
+- **Base branch:** the base it is compared against.
+
+### Overview
+Explain the PR in simple words so someone who has NOT worked on it can follow:
+the rationale (why), what changed, and the flow/steps at a high level. A few
+short sentences or bullets.
+
+### Diagram
+A Mermaid diagram of the flow/architecture when meaningful, else
+"N/A (trivial change)".
+
+### Merge risk
+`low` / `medium` / `high` with a one-line reason.
+
+### Must-fix items
+Numbered list of the blocking issues (`[high]` and critical `[medium]`). For
+each: a proper plain-English explanation of the problem and what it causes, the
+`path:line`, and a reference to its comment number below (e.g. "see #1"). Empty
+if none.
+
+### Reviewer-ready comments
+The main deliverable, and the ONLY place findings are listed (no per-role dump).
+Number every comment (1, 2, 3, …), ordered by severity (high → low), so each can
+be discussed by number. Start each with `### N. [severity] short title`, then:
+
+- **Severity:** [high|medium|low].
+- **Agent:** which perspective it came from (Architecture / Correctness / Typing
+  / Logging-Security / Config-DevOps / Testing / Docs / Code-quality).
+- **Call site:** `path:line` — real file path + the **actual line number** from
+  the diff so it is clickable (post-change line for added/changed lines; a range
+  `path:start-end` if it spans lines). Never just a symbol name without a line.
+- **Explanation:** what is wrong and **what it causes** (the concrete impact),
+  in plain words.
+- **Comment:** a short, human, first-person comment, paste-ready for GitHub.
+- **Fix:** the concrete change to make.
+- **Details (optional):** any extra technical rationale, rule reference, or
+  snippet — only if it adds value.
 
 Prefer bullet points over prose throughout.
