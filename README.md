@@ -250,8 +250,11 @@ The prompt always includes this toolkit's shared rules from
 - **Per target repo:** create `rules/<repo-name>.mdc` in this toolkit, where
   `<repo-name>` is the basename of the repo you run the command in. It is
   appended automatically.
-- **From the target repo itself:** any `.cursor/rules/*.mdc` in the repo you're
-  reviewing is included automatically (disable with `--no-project-rules`).
+- **From the target repo itself:** the repo's own rule files are included
+  automatically (disable with `--no-project-rules`): `.cursor/rules/**/*.mdc`
+  (recursive), the legacy `.cursorrules`, `CLAUDE.md`, and `AGENTS.md`. This way
+  the review honors the repo's standards in both Cursor and Claude Code — and the
+  `--deep` reviewer subagents, which have isolated context, see them too.
 
 Root `README.md` plus README files near the changed areas are added as context
 too (disable with `--no-readmes`).

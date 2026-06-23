@@ -13,9 +13,31 @@ set -euo pipefail
 
 REPO_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 BIN_SRC="$REPO_DIR/bin"
+SKILLS_SRC="$REPO_DIR/skills"
+AGENTS_SRC="$REPO_DIR/agents"
 INSTALL_DIR="${AGH_INSTALL_DIR:-$HOME/.local/bin}"
+SKILLS_DIR="${AGH_SKILLS_DIR:-$HOME/.claude/skills}"
+AGENTS_DIR="${AGH_AGENTS_DIR:-$HOME/.claude/agents}"
+
+# Optional: also install skills + agents into a target project's .cursor/ tree.
+# Cursor only reads project-scoped skills (.cursor/skills), so pass the repo you
+# want them available in:  ./install.sh --cursor-project /path/to/repo
+CURSOR_PROJECT=""
 
 COMMANDS=(ai-gh ai-pr-review ai-explain-pr ai-draft-pr ai-open-pr)
+
+# Claude Code / Cursor skills (each is a directory holding a SKILL.md). They wrap
+# the read-only prompt tools as the "hybrid" flow: the tool assembles
+# deterministic context, then the AI reviews/explains/drafts with live repo access.
+SKILLS=(pr-review explain-pr draft-pr)
+
+# Reviewer subagents (cross-agent markdown; read by both Claude Code and Cursor)
+# used by the pr-review skill's --deep mode to review each lens in parallel.
+AGENTS=(
+  review-correctness review-architecture review-code-quality
+  review-types-apis review-security review-performance
+  review-config-devops review-testing-docs
+)
 
 # Commands removed/renamed in past versions, cleaned up on (re)install so an
 # upgrade doesn't leave dangling symlinks or stale git aliases behind.
@@ -26,6 +48,71 @@ OBSOLETE_GIT_ALIASES=(ai-create-pr)
 info() { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+# Parse install options.
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --cursor-project)
+      [ "$#" -ge 2 ] || die "--cursor-project requires a path to a git repo."
+      CURSOR_PROJECT="$2"; shift 2 ;;
+    --cursor-project=*)
+      CURSOR_PROJECT="${1#*=}"; shift ;;
+    -h|--help)
+      cat <<'USAGE'
+install.sh — install ai-gh-tools (CLI commands, Claude Code skills + subagents).
+
+USAGE:
+  ./install.sh [--cursor-project DIR]
+
+OPTIONS:
+  --cursor-project DIR   Also install the skills + reviewer subagents into DIR's
+                         .cursor/skills and .cursor/agents (Cursor is project-
+                         scoped and has no global skills dir). DIR must be a repo.
+USAGE
+      exit 0 ;;
+    *)
+      die "unknown argument '$1'. Use --help." ;;
+  esac
+done
+
+# Symlink each named skill directory (src_root/<name>) into dest_dir/<name>.
+link_skills() {
+  local src_root="$1" dest_dir="$2" name src link
+  [ -d "$src_root" ] || { info "  no skills/ at $src_root; skipping"; return 0; }
+  mkdir -p "$dest_dir"
+  for name in "${SKILLS[@]}"; do
+    src="$src_root/$name"
+    if [ ! -f "$src/SKILL.md" ]; then
+      warn "skill source missing SKILL.md: $src (skipping)"; continue
+    fi
+    link="$dest_dir/$name"
+    # Only replace our own symlink; never clobber a real directory the user owns.
+    if [ -e "$link" ] && [ ! -L "$link" ]; then
+      warn "skipping skill '$name': $link exists and is not a symlink"; continue
+    fi
+    ln -sfn "$src" "$link"
+    info "  linked skill $link -> $src"
+  done
+}
+
+# Symlink each named agent file (src_root/<name>.md) into dest_dir/<name>.md.
+link_agents() {
+  local src_root="$1" dest_dir="$2" name src link
+  [ -d "$src_root" ] || { info "  no agents/ at $src_root; skipping"; return 0; }
+  mkdir -p "$dest_dir"
+  for name in "${AGENTS[@]}"; do
+    src="$src_root/$name.md"
+    if [ ! -f "$src" ]; then
+      warn "agent source missing: $src (skipping)"; continue
+    fi
+    link="$dest_dir/$name.md"
+    if [ -e "$link" ] && [ ! -L "$link" ]; then
+      warn "skipping agent '$name': $link exists and is not a symlink"; continue
+    fi
+    ln -sfn "$src" "$link"
+    info "  linked agent $link -> $src"
+  done
+}
 
 [ -d "$BIN_SRC" ] || die "could not find bin/ at $BIN_SRC"
 
@@ -53,6 +140,23 @@ for cmd in "${COMMANDS[@]}"; do
 done
 # Ensure lib scripts are readable/executable as needed (sourced, but harmless).
 chmod +x "$REPO_DIR"/lib/*.sh 2>/dev/null || true
+
+# 2b. Install Claude Code skills + reviewer subagents globally (~/.claude/...)
+# so they're available in every repo.
+link_skills "$SKILLS_SRC" "$SKILLS_DIR"
+link_agents "$AGENTS_SRC" "$AGENTS_DIR"
+
+# 2c. Optionally install into a target project's .cursor/ tree. Cursor has no
+# global skills dir, so skills must live inside each repo you use them in.
+if [ -n "$CURSOR_PROJECT" ]; then
+  if [ ! -d "$CURSOR_PROJECT" ]; then
+    die "--cursor-project '$CURSOR_PROJECT' is not a directory."
+  fi
+  proj="$(cd -P "$CURSOR_PROJECT" >/dev/null 2>&1 && pwd)"
+  info "Installing Cursor skills + agents into: $proj/.cursor"
+  link_skills "$SKILLS_SRC" "$proj/.cursor/skills"
+  link_agents "$AGENTS_SRC" "$proj/.cursor/agents"
+fi
 
 # 3. Ensure INSTALL_DIR is on PATH via the user's shell rc.
 ensure_path() {
@@ -145,6 +249,20 @@ Git aliases:
   git ai-explain --pr 123 --copy
   git ai-draft-pr --staged --copy
   git ai-open-pr origin/main
+
+Skills (run inside any repo, in Claude Code or Cursor):
+  /pr-review  origin/main          Single-pass review (cheap default)
+  /pr-review  origin/main --deep   Fan out to 8 parallel reviewer subagents
+  /pr-review  --pr 123 --deep --verify   ...and adversarially refute high findings
+  /explain-pr --staged             Explain a change set in plain English
+  /draft-pr   origin/main          Draft a PR title + description
+
+  The skills shell out to the read-only tools above for deterministic context,
+  then the AI reviews/explains/drafts with live codebase access. --deep delegates
+  to the review-* subagents (installed in ~/.claude/agents).
+
+For Cursor (project-scoped skills), also run:
+  ./install.sh --cursor-project /path/to/your/repo
 
 Note: ai-pr-review / ai-explain-pr / ai-draft-pr are read-only. Only ai-open-pr
 modifies your repo and GitHub, and it confirms before each step.

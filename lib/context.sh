@@ -47,7 +47,15 @@ agh_print_toolkit_rules() {
   return 0
 }
 
-# Emit the target repo's own .cursor/rules/*.mdc files, if present.
+# Emit the target repo's own rule files, in every format Cursor / Claude Code
+# load natively, so the review honors the repo's standards regardless of which
+# tool runs it — and so each isolated --deep subagent sees them too (subagents
+# don't reliably inherit a tool's auto-loaded rules; the context file is the
+# guaranteed channel). Sources, in order:
+#   - .cursor/rules/**/*.mdc  (recursive; Cursor project rules)
+#   - .cursorrules            (legacy single-file Cursor rules)
+#   - CLAUDE.md               (Claude Code project rules)
+#   - AGENTS.md               (cross-agent rules)
 #   $1 = repo root
 #   honors AGH_NO_PROJECT_RULES=1 to skip.
 agh_print_project_rules() {
@@ -55,20 +63,42 @@ agh_print_project_rules() {
   [ "${AGH_NO_PROJECT_RULES:-}" = "1" ] && return 0
   [ -z "$root" ] && return 0
 
-  local rules_dir="$root/.cursor/rules"
-  [ -d "$rules_dir" ] || return 0
+  local -a rule_files=()
+  local seen=" "
 
-  local found=0
-  local f
-  # Use a glob; nullglob-safe via the for/test pattern.
-  for f in "$rules_dir"/*.mdc; do
-    [ -f "$f" ] || continue
-    if [ "$found" -eq 0 ]; then
-      printf '\n## Project rules (.cursor/rules)\n'
-      found=1
-    fi
-    printf '\n### %s\n\n' "${f#"$root"/}"
-    cat "$f"
+  # Add a file once (dedup guards case-insensitive filesystems and repeats).
+  _agh_add_rule_file() {
+    local p="$1"
+    [ -f "$p" ] || return 0
+    case "$seen" in
+      *" $p "*) return 0 ;;
+    esac
+    seen="$seen$p "
+    rule_files+=("$p")
+  }
+
+  # Cursor project rules, recursively. Use find because bash 3.2 (macOS default)
+  # has no globstar; sort for stable, deterministic ordering.
+  local rules_dir="$root/.cursor/rules"
+  if [ -d "$rules_dir" ]; then
+    local f
+    while IFS= read -r f; do
+      _agh_add_rule_file "$f"
+    done < <(find "$rules_dir" -type f -name '*.mdc' 2>/dev/null | sort)
+  fi
+
+  # Single-file and cross-agent rule formats.
+  _agh_add_rule_file "$root/.cursorrules"
+  _agh_add_rule_file "$root/CLAUDE.md"
+  _agh_add_rule_file "$root/AGENTS.md"
+
+  [ "${#rule_files[@]}" -eq 0 ] && return 0
+
+  printf '\n## Project rules (repo-defined)\n'
+  local path
+  for path in "${rule_files[@]}"; do
+    printf '\n### %s\n\n' "${path#"$root"/}"
+    cat "$path"
     printf '\n'
   done
 }

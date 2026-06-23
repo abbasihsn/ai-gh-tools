@@ -9,9 +9,11 @@ guessing silently.
 ## Apply this repo's rules (required)
 
 Before reviewing, read the **"Toolkit review rules"** and **"Project rules
-(.cursor/rules)"** sections included later in this prompt. Treat them as the
-binding standards for THIS repository. Every finding must be consistent with
-them, and whenever a change violates one, **name the specific rule it breaks**.
+(repo-defined)"** sections included later in this prompt (the latter gathers the
+repo's own `.cursor/rules`, `.cursorrules`, `CLAUDE.md`, and `AGENTS.md`). Treat
+them as the binding standards for THIS repository. Every finding must be
+consistent with them, and whenever a change violates one, **name the specific
+rule it breaks**.
 If no rules sections are present, say so and fall back to general best practice.
 
 Also use the README context, repository metadata, changed files, and the full
