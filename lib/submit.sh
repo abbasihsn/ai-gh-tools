@@ -150,5 +150,10 @@ agh_edit_file() {
       return 0
     fi
   fi
-  "$ed" "$file" </dev/tty >/dev/tty 2>&1 || agh_warn "editor exited non-zero; using the body as-is."
+  # Split into command + args so values like "code --wait" / "emacsclient -t"
+  # are honored rather than treated as one (nonexistent) command name. The
+  # single-word fallbacks above pass through this unchanged.
+  local -a ed_cmd=()
+  read -r -a ed_cmd <<<"$ed"
+  "${ed_cmd[@]}" "$file" </dev/tty >/dev/tty 2>&1 || agh_warn "editor exited non-zero; using the body as-is."
 }
