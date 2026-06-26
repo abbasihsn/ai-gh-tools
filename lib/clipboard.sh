@@ -130,7 +130,7 @@ tell application "System Events"
     delay $step_delay
     keystroke "t" using {command down}
     delay $step_delay
-    keystroke "v" using {command down}
+    keystroke "v" using {command down, shift down}
     delay $step_delay
     $submit_line
   end tell

@@ -27,6 +27,43 @@ agh_gh_set_repo() {
 # which is the portable idiom that stays safe under `set -u` on bash 3.2
 # (macOS default) when the array is empty, without injecting an empty argument.
 
+# The GitHub login gh is currently authenticated as (empty if not logged in).
+agh_gh_current_user() {
+  gh api user --jq .login 2>/dev/null
+}
+
+# Strip any embedded credentials (user[:token]@) from a remote URL so a token in
+# an https://user:token@github.com/... remote is never echoed. Leaves scp-style
+# SSH URLs (git@github.com:owner/repo) untouched — that has no secret.
+_agh_redact_remote_url() {
+  printf '%s' "$1" | sed -E 's#(://)[^/@]*@#\1#'
+}
+
+# Print the gh identity + the target repo to stderr, for error context.
+#   $1 = repo override (the caller's OPT_REPO); falls back to the origin remote.
+agh_gh_print_identity() {
+  local repo_override="${1:-}" who repo
+  # These run under `set -e` and fail precisely in the broken states this
+  # diagnostic exists to explain (gh not logged in / no origin remote), so keep
+  # them non-fatal — otherwise the function aborts before printing anything.
+  who="$(agh_gh_current_user)" || who=""
+  if [ -n "$repo_override" ]; then
+    repo="$repo_override"
+  else
+    repo="$(git config --get remote.origin.url 2>/dev/null)" || repo=""
+    [ -n "$repo" ] && repo="$(_agh_redact_remote_url "$repo")"
+  fi
+  agh_err "  gh authenticated as : ${who:-<not logged in>}"
+  agh_err "  target repo         : ${repo:-<unknown>}"
+}
+
+# True (exit 0) if the PR can actually be fetched with the current gh auth/repo.
+#   $1 = pr ref
+agh_gh_pr_accessible() {
+  local pr="$1"
+  gh pr view "$pr" "${AGH_GH_REPO_ARGS[@]+"${AGH_GH_REPO_ARGS[@]}"}" --json number >/dev/null 2>&1
+}
+
 # Fetch PR metadata as formatted text (title, author, state, branches, body).
 #   $1 = pr ref (number/url/branch)
 agh_gh_pr_view() {

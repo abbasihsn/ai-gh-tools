@@ -7,8 +7,9 @@ alwaysApply: true
 
 These are the default, always-on standards applied by the `ai-gh-tools`
 commands. They tell the AI **how** to review a change set. Repo-specific
-overlays may be added as `rules/<repo-name>.mdc` and the target repo's own
-`.cursor/rules/*.mdc` are included when present.
+overlays may be added as `rules/<repo-name>.mdc`, and the target repo's own
+rule files (`.cursor/rules/*.mdc`, `.cursorrules`, `CLAUDE.md`, `AGENTS.md`) are
+included when present.
 
 ## Stance
 

@@ -51,9 +51,19 @@ cd ai-gh-tools
 - make them executable,
 - add `~/.local/bin` to your `PATH` (in `.zshrc` or `.bashrc`) if missing,
 - create git aliases (`git ai-gh`, `git ai-review`, `git ai-explain`,
-  `git ai-draft-pr`, `git ai-open-pr`).
+  `git ai-draft-pr`, `git ai-open-pr`),
+- install the Claude Code skills (`/pr-review`, `/explain-pr`, `/draft-pr`,
+  `/open-pr`) and the reviewer subagents into `~/.claude/skills` and
+  `~/.claude/agents` (set `AGH_INSTALL_SKILLS=0` to skip).
 
 Open a new shell (or `source ~/.zshrc`) afterwards.
+
+To also install the skills + subagents into a specific repo for **Cursor**
+(which only reads project-scoped skills), pass the repo path:
+
+```bash
+./install.sh --cursor-project /path/to/your/repo
+```
 
 ## Command examples
 
@@ -250,8 +260,11 @@ The prompt always includes this toolkit's shared rules from
 - **Per target repo:** create `rules/<repo-name>.mdc` in this toolkit, where
   `<repo-name>` is the basename of the repo you run the command in. It is
   appended automatically.
-- **From the target repo itself:** any `.cursor/rules/*.mdc` in the repo you're
-  reviewing is included automatically (disable with `--no-project-rules`).
+- **From the target repo itself:** the repo's own rule files are included
+  automatically (disable with `--no-project-rules`): `.cursor/rules/**/*.mdc`
+  (recursive), the legacy `.cursorrules`, `CLAUDE.md`, and `AGENTS.md`. This way
+  the review honors the repo's standards in both Cursor and Claude Code — and the
+  `--deep` reviewer subagents, which have isolated context, see them too.
 
 Root `README.md` plus README files near the changed areas are added as context
 too (disable with `--no-readmes`).
@@ -291,6 +304,8 @@ ai-gh-tools/
   prompts/        # the AI instruction templates
   rules/          # general.mdc + optional rules/<repo-name>.mdc overlays
   templates/      # pr-body.md (the team PR template used by ai-open-pr)
+  skills/         # Claude Code / Cursor SKILL.md flows (pr-review, explain-pr, …)
+  agents/         # review-* reviewer subagents (used by /pr-review --deep)
   examples/       # sample generated output
   tests/          # deterministic unit tests for the shared helpers
   install.sh
@@ -300,7 +315,8 @@ ai-gh-tools/
 ## Running the tests
 
 The pure shell helpers (branch humanizing, the `--exclude` glob filters,
-remote-owner parsing) have deterministic unit tests:
+remote-owner parsing, and project-rules gathering — `.cursor/rules`,
+`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) have deterministic unit tests:
 
 ```bash
 ./tests/test_helpers.sh

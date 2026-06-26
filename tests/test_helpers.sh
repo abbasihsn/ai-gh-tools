@@ -14,6 +14,8 @@ ROOT="$(cd "$HERE/.." && pwd)"
 . "$ROOT/lib/github.sh"
 # shellcheck source=/dev/null
 . "$ROOT/lib/submit.sh"
+# shellcheck source=/dev/null
+. "$ROOT/lib/context.sh"
 
 agh_install_cleanup_trap
 
@@ -36,6 +38,16 @@ contains() {
   local got=absent
   case "$2" in *"$3"*) got=present ;; esac
   check "$1" "$4" "$got"
+}
+
+# order_ok HAYSTACK FIRST SECOND -> "yes" if FIRST occurs before SECOND (both
+# must be present), else "no". Used to assert deterministic source ordering.
+order_ok() {
+  local h="$1" a="$2" b="$3" pa pb
+  case "$h" in *"$a"*) ;; *) printf 'no'; return ;; esac
+  case "$h" in *"$b"*) ;; *) printf 'no'; return ;; esac
+  pa="${h%%"$a"*}"; pb="${h%%"$b"*}"
+  if [ "${#pa}" -lt "${#pb}" ]; then printf 'yes'; else printf 'no'; fi
 }
 
 # --- agh_humanize_branch --------------------------------------------------
@@ -97,6 +109,34 @@ check "owner from HTTPS URL"      "https-owner" "$(cd "$TMP_REPO" && agh_remote_
 check "owner from ssh:// URL"     "ssh2-owner"  "$(cd "$TMP_REPO" && agh_remote_owner ssh_scheme)"
 check "owner from missing remote" ""            "$(cd "$TMP_REPO" && agh_remote_owner nope)"
 rm -rf "$TMP_REPO"
+
+# --- agh_print_project_rules ----------------------------------------------
+RULES_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-rules.XXXXXX")"
+mkdir -p "$RULES_REPO/.cursor/rules/nested"
+printf 'CURSOR_TOP_RULE\n'    >"$RULES_REPO/.cursor/rules/a.mdc"
+printf 'CURSOR_NESTED_RULE\n' >"$RULES_REPO/.cursor/rules/nested/b.mdc"
+printf 'LEGACY_CURSORRULES\n' >"$RULES_REPO/.cursorrules"
+printf 'CLAUDE_RULE\n'        >"$RULES_REPO/CLAUDE.md"
+printf 'AGENTS_RULE\n'        >"$RULES_REPO/AGENTS.md"
+RULES_OUT="$(agh_print_project_rules "$RULES_REPO")"
+contains "project rules include .cursor/rules"        "$RULES_OUT" "CURSOR_TOP_RULE"    "present"
+contains "project rules recurse into nested dirs"     "$RULES_OUT" "CURSOR_NESTED_RULE" "present"
+contains "project rules include .cursorrules"         "$RULES_OUT" "LEGACY_CURSORRULES" "present"
+contains "project rules include CLAUDE.md"            "$RULES_OUT" "CLAUDE_RULE"        "present"
+contains "project rules include AGENTS.md"            "$RULES_OUT" "AGENTS_RULE"        "present"
+# Ordering: sources must appear in the documented order
+# (.cursor/rules sorted -> .cursorrules -> CLAUDE.md -> AGENTS.md).
+check "rules order: .cursor top before nested"   "yes" "$(order_ok "$RULES_OUT" CURSOR_TOP_RULE CURSOR_NESTED_RULE)"
+check "rules order: .cursor before .cursorrules" "yes" "$(order_ok "$RULES_OUT" CURSOR_NESTED_RULE LEGACY_CURSORRULES)"
+check "rules order: .cursorrules before CLAUDE"  "yes" "$(order_ok "$RULES_OUT" LEGACY_CURSORRULES CLAUDE_RULE)"
+check "rules order: CLAUDE before AGENTS"        "yes" "$(order_ok "$RULES_OUT" CLAUDE_RULE AGENTS_RULE)"
+# Dedup: exactly one heading per rule file (5), no file emitted twice.
+check "rules emit one heading per file (no dups)" "5" "$(printf '%s\n' "$RULES_OUT" | grep -c '^### ')"
+RULES_OFF="$(AGH_NO_PROJECT_RULES=1 agh_print_project_rules "$RULES_REPO")"
+check "no-project-rules suppresses output" "" "$RULES_OFF"
+EMPTY_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-empty.XXXXXX")"
+check "no rule files -> empty output" "" "$(agh_print_project_rules "$EMPTY_REPO")"
+rm -rf "$RULES_REPO" "$EMPTY_REPO"
 
 # --- Summary --------------------------------------------------------------
 printf '\n%s test(s), %s failure(s)\n' "$TESTS" "$FAILS"

@@ -9,9 +9,11 @@ guessing silently.
 ## Apply this repo's rules (required)
 
 Before reviewing, read the **"Toolkit review rules"** and **"Project rules
-(.cursor/rules)"** sections included later in this prompt. Treat them as the
-binding standards for THIS repository. Every finding must be consistent with
-them, and whenever a change violates one, **name the specific rule it breaks**.
+(repo-defined)"** sections included later in this prompt (the latter gathers the
+repo's own `.cursor/rules`, `.cursorrules`, `CLAUDE.md`, and `AGENTS.md`). Treat
+them as the binding standards for THIS repository. Every finding must be
+consistent with them, and whenever a change violates one, **name the specific
+rule it breaks**.
 If no rules sections are present, say so and fall back to general best practice.
 
 Also use the README context, repository metadata, changed files, and the full
@@ -36,10 +38,11 @@ If the change has a non-trivial flow or affects architecture, include a
 useful). Use a fenced ```mermaid block. Only skip it if the change is genuinely
 too trivial to diagram — in that case write "Diagram: N/A (trivial change)".
 
-## Reviewer roles
+## Reviewer perspectives (internal — do NOT output a per-role section)
 
-Run each role in turn. For every role, give concrete findings (with severity +
-file/line) or explicitly say "no issues found".
+Review the change through each perspective below, but **do not print a
+role-by-role findings dump**. Fold every finding into the "Reviewer-ready
+comments" section, and tag each comment with the perspective it came from.
 
 1. **Architecture reviewer** — module boundaries, responsibilities, coupling,
    reuse vs. copy-paste, placement of shared logic, naming of public APIs.
@@ -67,6 +70,10 @@ file/line) or explicitly say "no issues found".
    unused imports, function size/complexity (prefer early returns over deep
    nesting), naming conventions, minimal public surface, and consistency with
    existing patterns in the touched area.
+9. **Performance / efficiency reviewer** — algorithmic complexity, redundant
+   work or repeated I/O, N+1 / repeated network or subprocess calls, blocking
+   calls on hot paths, unbounded memory/result growth, and missing
+   batching/caching/pagination.
 
 ## Severity scale
 
@@ -77,25 +84,53 @@ Tag **every** issue and every review comment with one of:
 - **[medium]** — should fix: real problems that are not strictly blocking.
 - **[low]** — minor: style/readability/nits and optional improvements.
 
-## Required output sections
+## Required output — follow this exact template
 
-1. **Summary** — 2–4 sentences: what this PR does and your overall verdict.
-2. **Diagram** — the Mermaid diagram from above (or "N/A (trivial change)").
-3. **Findings by role** — for each role, a bulleted list. Each finding:
-   `[severity] path:line — issue` and a one-line "why it matters". Reference the
-   broken rule when applicable.
-4. **Merge risk** — `low` / `medium` / `high` with a one-line justification.
-5. **Must-fix items** — numbered list of the `[high]` (and critical `[medium]`)
-   items. Empty if none.
-6. **Reviewer-ready GitHub comments** — the deliverable I will actually use. For
-   **each** comment, output this exact structure:
+Keep it simple and useful. Plain English, no fancy words, no filler. Output the
+sections in this order:
 
-   - **Call site:** `path:line` (or `path` + hunk anchor)
-   - **Severity:** [high|medium|low]
-   - **Human comment:** a friendly, concise, first-person comment written exactly
-     the way a real reviewer types in GitHub — this is what I will copy/paste
-     into the PR. No preamble, ready to paste. Suggest the concrete change.
-   - **AI note:** the deeper technical rationale — root cause, references to the
-     rule/standard, edge cases, and a suggested fix or code snippet.
+### Title
+A short, descriptive title for the PR.
 
-Keep everything concise and skimmable. Prefer bullet points over prose.
+### Branches
+- **Feature branch:** the head branch (from PR/repo metadata).
+- **Base branch:** the base it is compared against.
+
+### Overview
+Explain the PR in simple words so someone who has NOT worked on it can follow:
+the rationale (why), what changed, and the flow/steps at a high level. A few
+short sentences or bullets.
+
+### Diagram
+A Mermaid diagram of the flow/architecture when meaningful, else
+"N/A (trivial change)".
+
+### Merge risk
+`low` / `medium` / `high` with a one-line reason.
+
+### Must-fix items
+Numbered list of the blocking issues (`[high]` and critical `[medium]`). For
+each: a proper plain-English explanation of the problem and what it causes, the
+`path:line`, and a reference to its comment number below (e.g. "see #1"). Empty
+if none.
+
+### Reviewer-ready comments
+The main deliverable, and the ONLY place findings are listed (no per-role dump).
+Number every comment (1, 2, 3, …), ordered by severity (high → low), so each can
+be discussed by number. Start each with `### N. [severity] short title`, then:
+
+- **Severity:** [high|medium|low].
+- **Agent:** which perspective it came from (Architecture / Correctness / Typing
+  / Logging-Security / Config-DevOps / Performance / Testing / Docs /
+  Code-quality).
+- **Call site:** `path:line` — real file path + the **actual line number** from
+  the diff so it is clickable (post-change line for added/changed lines; a range
+  `path:start-end` if it spans lines). Never just a symbol name without a line.
+- **Explanation:** what is wrong and **what it causes** (the concrete impact),
+  in plain words.
+- **Comment:** a short, human, first-person comment, paste-ready for GitHub.
+- **Fix:** the concrete change to make.
+- **Details (optional):** any extra technical rationale, rule reference, or
+  snippet — only if it adds value.
+
+Prefer bullet points over prose throughout.

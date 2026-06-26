@@ -351,6 +351,18 @@ _agh_build_pr() {
   agh_require_gh
   agh_gh_set_repo "$OPT_REPO"
 
+  # Preflight: fail loudly (not silently) if gh can't fetch the PR, and report
+  # WHO gh is acting as and WHICH repo it resolved — the usual culprit is gh
+  # being logged in as the wrong account, or org SSO not being authorized.
+  if ! agh_gh_pr_accessible "$OPT_PR"; then
+    agh_err "could not fetch PR '$OPT_PR' via gh."
+    agh_gh_print_identity "${OPT_REPO:-}"
+    agh_err "Likely that account can't access this repo (wrong account or org SSO not authorized)."
+    agh_err "Fix: 'gh auth status' · 'gh auth switch' / 'gh auth login' (right account) · 'gh auth refresh' (authorize org SSO)."
+    agh_err "Then verify with: gh pr view $OPT_PR"
+    exit 1
+  fi
+
   local repo_root repo_name
   repo_root="$(agh_repo_root)"
   repo_name="$(agh_repo_name)"
@@ -364,6 +376,14 @@ _agh_build_pr() {
   agh_gh_pr_changed_files "$OPT_PR" | agh_gh_filter_file_list "${OPT_EXCLUDES[@]+"${OPT_EXCLUDES[@]}"}" >"$files_tmp" || true
   agh_gh_pr_diff "$OPT_PR" | agh_gh_filter_diff "${OPT_EXCLUDES[@]+"${OPT_EXCLUDES[@]}"}" >"$diff_tmp" || true
 
+  if [ ! -s "$diff_tmp" ]; then
+    agh_err "PR '$OPT_PR' returned an EMPTY diff via gh — nothing to review; aborting (no prompt generated)."
+    agh_gh_print_identity "${OPT_REPO:-}"
+    agh_err "Verify with: gh pr diff $OPT_PR"
+    agh_err "If this PR should have changes, it's likely org SSO scope ('gh auth refresh') or the wrong gh account ('gh auth switch'); or double-check the PR number."
+    exit 1
+  fi
+
   {
     agh_print_toolkit_prompt "$AGH_PROMPT_NAME"
     agh_print_toolkit_rules "$repo_name"
@@ -376,11 +396,11 @@ _agh_build_pr() {
     fi
 
     printf '\n## Pull request metadata\n\n'
-    agh_gh_pr_view "$OPT_PR" | sed 's/^/    /'
+    { agh_gh_pr_view "$OPT_PR" | sed 's/^/    /'; } || true
 
     if [ "$OPT_COMMENTS" = "1" ]; then
       printf '\n## Existing PR comments\n\n'
-      agh_gh_pr_comments "$OPT_PR"
+      agh_gh_pr_comments "$OPT_PR" || true
     fi
 
     printf '\n## Changed files\n\n'
