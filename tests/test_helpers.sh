@@ -148,7 +148,10 @@ TREE_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-tree.XXXXXX")"
   mkdir -p lib bin
   printf 'top\n'    >README.md
   printf 'engine\n' >lib/common.sh
+  printf 'util\n'   >lib/util.sh
   printf 'cli\n'    >bin/tool
+  printf '%s\n' 'def real_def():' '    pass' '' 'do_work()'  >app.py
+  printf '%s\n' 'my_shell_fn() {' '  echo hi' '}'            >lib/fns.sh
   git add -A
 )
 ALL_FILES="$(cd "$TREE_REPO" && agh_git_all_files)"
@@ -156,16 +159,29 @@ contains "all-files lists tracked lib file" "$ALL_FILES" "lib/common.sh" "presen
 contains "all-files lists tracked bin file" "$ALL_FILES" "bin/tool"      "present"
 contains "all-files lists root file"        "$ALL_FILES" "README.md"     "present"
 
+# count for a block from the tree output (awk: count is $1, block name is $2)
+tree_block_count() { printf '%s\n' "$1" | awk -v b="$2" '$2==b {print $1; exit}'; }
+
 TREE_OUT="$(agh_print_file_tree "$TREE_REPO")"
 contains "file-tree has section header"    "$TREE_OUT" "## Project files (whole repo)" "present"
 contains "file-tree has per-block section" "$TREE_OUT" "Files per top-level block"     "present"
 contains "file-tree lists a tracked file"  "$TREE_OUT" "lib/common.sh"                 "present"
+check "file-tree counts lib block (3 files)" "3" "$(tree_block_count "$TREE_OUT" lib)"
+check "file-tree counts bin block (1 file)"  "1" "$(tree_block_count "$TREE_OUT" bin)"
 
-# --- agh_print_symbol_inventory: shell function detection ------------------
-printf '%s\n' 'my_shell_fn() {' '  echo hi' '}' >"$TREE_REPO/lib/fns.sh"
-( cd "$TREE_REPO" && git add -A )
-contains "symbol inventory detects shell function" \
-  "$(AGH_WITH_SYMBOLS=1 agh_print_symbol_inventory "$TREE_REPO")" "my_shell_fn" "present"
+# AGH_TREE_CAP truncates and reports the remainder
+contains "file-tree truncates at AGH_TREE_CAP=1" \
+  "$(AGH_TREE_CAP=1 agh_print_file_tree "$TREE_REPO")" "more files truncated" "present"
+# A non-numeric cap must NOT break the listing; it falls back to the default
+# (so the file list still appears, with no truncation).
+contains "invalid AGH_TREE_CAP falls back (still lists files)" \
+  "$(AGH_TREE_CAP=abc agh_print_file_tree "$TREE_REPO")" "lib/common.sh" "present"
+
+# --- agh_print_symbol_inventory --------------------------------------------
+SYM_ON="$(AGH_WITH_SYMBOLS=1 agh_print_symbol_inventory "$TREE_REPO")"
+contains "symbol inventory detects shell function" "$SYM_ON" "my_shell_fn" "present"
+contains "symbol inventory detects keyword def"    "$SYM_ON" "real_def"    "present"
+contains "symbol inventory excludes bare calls"    "$SYM_ON" "do_work"     "absent"
 contains "symbol inventory is off without --symbols" \
   "$(agh_print_symbol_inventory "$TREE_REPO")" "my_shell_fn" "absent"
 rm -rf "$TREE_REPO"

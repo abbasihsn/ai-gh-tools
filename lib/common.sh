@@ -361,6 +361,8 @@ agh_parse_args() {
   if [ "${AGH_FROM_MODE:-0}" = "1" ]; then
     [ -n "$OPT_FROM" ] || agh_die "--from FILE is required (the bug JSON written by ai-project-audit)."
     [ -z "$OPT_BASE" ] || agh_die "this command takes --from FILE, not a base ref ('$OPT_BASE')."
+    [ "$OPT_STAGED" != "1" ] || agh_die "this command takes --from FILE; --staged is not supported."
+    [ "$OPT_INCLUDE_WT" != "1" ] || agh_die "this command takes --from FILE; --include-working-tree is not supported."
   fi
 }
 
@@ -539,7 +541,8 @@ _agh_build_project() {
 _agh_build_jira() {
   local out="$1"
   agh_require_git_repo
-  [ -n "$OPT_FROM" ] || agh_die "--from FILE is required."
+  # Presence of --from is validated in agh_parse_args; here we only confirm the
+  # file exists (the one check the parser can't do).
   [ -f "$OPT_FROM" ] || agh_die "--from file not found: $OPT_FROM"
 
   local repo_root repo_name

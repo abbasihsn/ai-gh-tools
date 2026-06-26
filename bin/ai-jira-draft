@@ -44,19 +44,18 @@ title + description per bug.
 
 REQUIRED:
   --from FILE         Path to the bug JSON (the file ai-project-audit produced,
-                      e.g. $TMPDIR/agh-audit-bugs.json).
+                      e.g. ${TMPDIR:-/tmp}/agh-audit-bugs.json).
 
 OPTIONS:
   --copy              Copy the generated prompt to the clipboard.
   --cursor            Copy, then open a new Cursor chat tab and paste (macOS).
   --cursor-submit     Like --cursor, but also press Return to send it.
   --out FILE          Write the generated prompt to FILE.
-  --no-project-rules  Skip the repo's own .cursor/rules / CLAUDE.md / AGENTS.md.
   --no-tool-rules     Skip this toolkit's rules.
   -h, --help          Show this help.
 
 EXAMPLES:
-  ai-jira-draft --from "$TMPDIR/agh-audit-bugs.json" --copy
+  ai-jira-draft --from "${TMPDIR:-/tmp}/agh-audit-bugs.json" --copy
   ai-jira-draft --from bugs.json --out /tmp/jira-tickets.md
 
 This tool NEVER posts to GitHub/Jira or modifies anything.

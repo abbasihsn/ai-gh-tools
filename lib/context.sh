@@ -203,6 +203,17 @@ agh_print_staged_metadata() {
   printf -- '- branch: %s\n' "$(agh_current_branch)"
 }
 
+# Normalize a user-supplied cap (env var) to a positive integer, falling back to
+# the given default. Guards against non-numeric / zero / negative values, which
+# would otherwise make `head -n "$cap"` fail and abort the run under `set -e`.
+#   $1 = raw value   $2 = default
+_agh_cap() {
+  case "$1" in
+    ''|*[!0-9]*) printf '%s' "$2" ;;
+    *) if [ "$1" -gt 0 ]; then printf '%s' "$1"; else printf '%s' "$2"; fi ;;
+  esac
+}
+
 # Whole-project file inventory: every tracked file, with a per-top-level-block
 # count and the full list (capped). Gives the AI the shape of the codebase for the
 # project explain/audit commands, and the block list the audit selection is built
@@ -221,7 +232,7 @@ agh_print_file_tree() {
 
   local total cap
   total="$(wc -l <"$tmp" | tr -d ' ')"
-  cap="${AGH_TREE_CAP:-400}"
+  cap="$(_agh_cap "${AGH_TREE_CAP:-}" 400)"
 
   printf '\n## Project files (whole repo)\n\n'
   printf -- '- tracked files: %s\n' "$total"
@@ -257,19 +268,25 @@ agh_print_symbol_inventory() {
   [ -z "$root" ] && return 0
   command -v git >/dev/null 2>&1 || return 0
 
-  local cap="${AGH_SYMBOLS_CAP:-500}"
+  local cap
+  cap="$(_agh_cap "${AGH_SYMBOLS_CAP:-}" 500)"
   # Definition-like lines across common languages (captures methods via the
-  # leading-whitespace allowance, e.g. `def` inside a class). The second
-  # alternation matches POSIX-shell function definitions (`name() {`), which the
-  # keyword list above misses since shell funcs usually have no leading keyword.
-  local pattern='^[[:space:]]*(export[[:space:]]+)?(public[[:space:]]+|private[[:space:]]+)?(async[[:space:]]+)?(def|class|func|function|module|interface|type|struct|trait|enum)[[:space:]]+[A-Za-z_]|^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)'
+  # leading-whitespace allowance, e.g. `def` inside a class). `function` also
+  # covers the `function name` shell style.
+  local kw_pattern='^[[:space:]]*(export[[:space:]]+)?(public[[:space:]]+|private[[:space:]]+)?(async[[:space:]]+)?(def|class|func|function|module|interface|type|struct|trait|enum)[[:space:]]+[A-Za-z_]'
+  # POSIX-shell function defs (`name() {`) have no leading keyword, so they're
+  # matched separately and ONLY in shell files. Requiring the opening brace keeps
+  # bare call sites (`foo()`) in any language out of the inventory.
+  local sh_pattern='^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{'
 
   local tmp
   tmp="$(agh_mktemp)"
-  ( cd "$root" && git grep -nE "$pattern" -- \
+  ( cd "$root" && git grep -nE "$kw_pattern" -- \
       '*.py' '*.pyi' '*.js' '*.jsx' '*.ts' '*.tsx' '*.go' '*.rb' '*.rs' \
       '*.java' '*.kt' '*.cs' '*.php' '*.scala' '*.swift' \
       '*.sh' '*.bash' 2>/dev/null ) >"$tmp" || true
+  ( cd "$root" && git grep -nE "$sh_pattern" -- \
+      '*.sh' '*.bash' 2>/dev/null ) >>"$tmp" || true
   [ -s "$tmp" ] || return 0
 
   local total

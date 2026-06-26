@@ -8,9 +8,10 @@ context gathering (diff, changed files, repo rules, README context, PR metadata)
 and hands you a single prompt to paste into your AI tool of choice. One command,
 `ai-open-pr`, additionally **commits, pushes, and opens a PR** for you.
 
-> **The three prompt tools never write to GitHub** (no comments, reviews, pushes,
-> or commits). The fourth tool, **`ai-open-pr`, does modify your repo and the
-> remote** — it confirms before each step. See [Privacy & security](#privacy--security).
+> **Every command except one never writes to GitHub** (no comments, reviews,
+> pushes, or commits). The lone exception, **`ai-open-pr`, does modify your repo
+> and the remote** — it confirms before each step. See
+> [Privacy & security](#privacy--security).
 
 ## What you get
 
@@ -166,10 +167,11 @@ if anything fails, the prompt is still left on your clipboard to paste manually.
 
 ## Whole-project commands
 
-Three commands work on the **entire repo** instead of a change set. They build
-whole-project context (file tree, the repo's rules, READMEs, metadata, and a
-definition inventory) and are best driven by their skills, which fan work out to
-per-block subagents.
+Three commands work on the **entire repo** instead of a change set, and are best
+driven by their skills, which fan work out to per-block subagents.
+`ai-explain-project` and `ai-project-audit` build whole-project context (file tree,
+the repo's rules, READMEs, metadata, and a definition inventory); `ai-jira-draft`
+instead embeds the audit's bug JSON plus repo metadata and the toolkit rules.
 
 ```bash
 # 1. Explain the whole project (architecture, blocks, how they connect)
@@ -180,7 +182,7 @@ ai-explain-project --copy
 ai-project-audit --out /tmp/project-audit.md
 
 # 3. Turn audited bugs into humanized Jira tickets (reads the audit's JSON)
-ai-jira-draft --from "$TMPDIR/agh-audit-bugs.json" --copy
+ai-jira-draft --from "${TMPDIR:-/tmp}/agh-audit-bugs.json" --copy
 ```
 
 The intended flow is a **pipeline**, run via the skills in Claude Code / Cursor:
@@ -191,7 +193,7 @@ The intended flow is a **pipeline**, run via the skills in Claude Code / Cursor:
    one bug-hunter per block, **adversarially verifies** each finding (so only
    valid/worth-filing bugs survive), attributes each to its block + blast radius,
    then **prints the audit in chat AND writes a bug file** to
-   `$TMPDIR/agh-audit-bugs.json`.
+   `${TMPDIR:-/tmp}/agh-audit-bugs.json`.
 3. **`/jira-draft --from <that file>`** — re-validates each bug as a final gate and
    drafts a plain-language Jira **title + description** per bug.
 
@@ -340,9 +342,10 @@ No re-install needed unless `install.sh` itself changed (re-run it if so).
 
 ## Privacy & security
 
-- **Three tools are read-only.** `ai-pr-review`, `ai-explain-pr`, and
-  `ai-draft-pr` only run read-only git/`gh` commands. They never call
-  `gh pr review`, `gh pr comment`, `gh pr merge`, `git push`, or create commits.
+- **All commands but one are read-only.** `ai-pr-review`, `ai-explain-pr`,
+  `ai-draft-pr`, `ai-explain-project`, `ai-project-audit`, and `ai-jira-draft`
+  only run read-only git/`gh` commands. They never call `gh pr review`,
+  `gh pr comment`, `gh pr merge`, `git push`, or create commits.
 - **`ai-open-pr` is the exception.** It intentionally commits, pushes, and opens
   a PR. It confirms before each mutating step (unless `--yes`), supports
   `--dry-run`, and never force-pushes, amends, or skips git hooks.
@@ -374,8 +377,9 @@ ai-gh-tools/
 ## Running the tests
 
 The pure shell helpers (branch humanizing, the `--exclude` glob filters,
-remote-owner parsing, and project-rules gathering — `.cursor/rules`,
-`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) have deterministic unit tests:
+remote-owner parsing, project-rules gathering — `.cursor/rules`, `.cursorrules`,
+`CLAUDE.md`, `AGENTS.md` — the whole-project file tree / `git ls-files` helper,
+and shell-function symbol detection) have deterministic unit tests:
 
 ```bash
 ./tests/test_helpers.sh
