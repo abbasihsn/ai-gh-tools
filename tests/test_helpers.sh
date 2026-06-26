@@ -11,6 +11,8 @@ ROOT="$(cd "$HERE/.." && pwd)"
 # shellcheck source=/dev/null
 . "$ROOT/lib/common.sh"
 # shellcheck source=/dev/null
+. "$ROOT/lib/git.sh"
+# shellcheck source=/dev/null
 . "$ROOT/lib/github.sh"
 # shellcheck source=/dev/null
 . "$ROOT/lib/submit.sh"
@@ -137,6 +139,36 @@ check "no-project-rules suppresses output" "" "$RULES_OFF"
 EMPTY_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-empty.XXXXXX")"
 check "no rule files -> empty output" "" "$(agh_print_project_rules "$EMPTY_REPO")"
 rm -rf "$RULES_REPO" "$EMPTY_REPO"
+
+# --- agh_git_all_files / agh_print_file_tree (whole-project mode) ----------
+TREE_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-tree.XXXXXX")"
+(
+  cd "$TREE_REPO" || exit 1
+  git init -q
+  mkdir -p lib bin
+  printf 'top\n'    >README.md
+  printf 'engine\n' >lib/common.sh
+  printf 'cli\n'    >bin/tool
+  git add -A
+)
+ALL_FILES="$(cd "$TREE_REPO" && agh_git_all_files)"
+contains "all-files lists tracked lib file" "$ALL_FILES" "lib/common.sh" "present"
+contains "all-files lists tracked bin file" "$ALL_FILES" "bin/tool"      "present"
+contains "all-files lists root file"        "$ALL_FILES" "README.md"     "present"
+
+TREE_OUT="$(agh_print_file_tree "$TREE_REPO")"
+contains "file-tree has section header"    "$TREE_OUT" "## Project files (whole repo)" "present"
+contains "file-tree has per-block section" "$TREE_OUT" "Files per top-level block"     "present"
+contains "file-tree lists a tracked file"  "$TREE_OUT" "lib/common.sh"                 "present"
+
+# --- agh_print_symbol_inventory: shell function detection ------------------
+printf '%s\n' 'my_shell_fn() {' '  echo hi' '}' >"$TREE_REPO/lib/fns.sh"
+( cd "$TREE_REPO" && git add -A )
+contains "symbol inventory detects shell function" \
+  "$(AGH_WITH_SYMBOLS=1 agh_print_symbol_inventory "$TREE_REPO")" "my_shell_fn" "present"
+contains "symbol inventory is off without --symbols" \
+  "$(agh_print_symbol_inventory "$TREE_REPO")" "my_shell_fn" "absent"
+rm -rf "$TREE_REPO"
 
 # --- Summary --------------------------------------------------------------
 printf '\n%s test(s), %s failure(s)\n' "$TESTS" "$FAILS"

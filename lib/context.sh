@@ -203,6 +203,46 @@ agh_print_staged_metadata() {
   printf -- '- branch: %s\n' "$(agh_current_branch)"
 }
 
+# Whole-project file inventory: every tracked file, with a per-top-level-block
+# count and the full list (capped). Gives the AI the shape of the codebase for the
+# project explain/audit commands, and the block list the audit selection is built
+# from. Only meaningful in whole-project mode.
+#   $1 = repo root
+#   AGH_TREE_CAP caps the number of listed files (default 400).
+agh_print_file_tree() {
+  local root="${1:-}"
+  [ -z "$root" ] && return 0
+  command -v git >/dev/null 2>&1 || return 0
+
+  local tmp
+  tmp="$(agh_mktemp)"
+  agh_git_all_files "$root" >"$tmp" || true
+  [ -s "$tmp" ] || return 0
+
+  local total cap
+  total="$(wc -l <"$tmp" | tr -d ' ')"
+  cap="${AGH_TREE_CAP:-400}"
+
+  printf '\n## Project files (whole repo)\n\n'
+  printf -- '- tracked files: %s\n' "$total"
+
+  printf '\n### Files per top-level block\n\n'
+  printf '```\n'
+  # Count files under each top-level path segment ("(root files)" for top-level
+  # files), highest count first. awk assoc arrays are bash-3.2 safe.
+  awk -F/ '{ if (NF > 1) c[$1]++; else c["(root files)"]++ }
+           END { for (k in c) printf "%6d  %s\n", c[k], k }' "$tmp" | sort -rn
+  printf '```\n'
+
+  printf '\n### File list\n\n'
+  printf '```\n'
+  head -n "$cap" "$tmp"
+  if [ "$total" -gt "$cap" ]; then
+    printf '... (%s more files truncated; raise AGH_TREE_CAP to see more)\n' "$((total - cap))"
+  fi
+  printf '```\n'
+}
+
 # Inventory of existing function/class/method definitions across the repo, so a
 # reviewer can detect duplication against code that is NOT in the diff (i.e. what
 # already exists on the base/main). Local checkout is the source of truth, so
@@ -219,14 +259,17 @@ agh_print_symbol_inventory() {
 
   local cap="${AGH_SYMBOLS_CAP:-500}"
   # Definition-like lines across common languages (captures methods via the
-  # leading-whitespace allowance, e.g. `def` inside a class).
-  local pattern='^[[:space:]]*(export[[:space:]]+)?(public[[:space:]]+|private[[:space:]]+)?(async[[:space:]]+)?(def|class|func|function|module|interface|type|struct|trait|enum)[[:space:]]+[A-Za-z_]'
+  # leading-whitespace allowance, e.g. `def` inside a class). The second
+  # alternation matches POSIX-shell function definitions (`name() {`), which the
+  # keyword list above misses since shell funcs usually have no leading keyword.
+  local pattern='^[[:space:]]*(export[[:space:]]+)?(public[[:space:]]+|private[[:space:]]+)?(async[[:space:]]+)?(def|class|func|function|module|interface|type|struct|trait|enum)[[:space:]]+[A-Za-z_]|^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)'
 
   local tmp
   tmp="$(agh_mktemp)"
   ( cd "$root" && git grep -nE "$pattern" -- \
       '*.py' '*.pyi' '*.js' '*.jsx' '*.ts' '*.tsx' '*.go' '*.rb' '*.rs' \
-      '*.java' '*.kt' '*.cs' '*.php' '*.scala' '*.swift' 2>/dev/null ) >"$tmp" || true
+      '*.java' '*.kt' '*.cs' '*.php' '*.scala' '*.swift' \
+      '*.sh' '*.bash' 2>/dev/null ) >"$tmp" || true
   [ -s "$tmp" ] || return 0
 
   local total

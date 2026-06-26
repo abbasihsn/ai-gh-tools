@@ -68,3 +68,11 @@ agh_git_branch_commits() {
   local base="$1"
   git log --no-merges --format='- %h %s' "${base}..HEAD" 2>/dev/null
 }
+
+# All tracked files in the repo (whole-project mode). Source of truth for the
+# file tree / block map used by the project explain + audit commands.
+#   $1 = repo root (optional; defaults to cwd)
+agh_git_all_files() {
+  local root="${1:-.}"
+  ( cd "$root" >/dev/null 2>&1 && git ls-files 2>/dev/null )
+}

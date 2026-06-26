@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# ai-project-audit — generate a whole-project high/medium bug-audit prompt.
+#
+# Read-only: never posts comments, reviews, or pushes anything. It assembles a
+# prompt + whole-repo context (file tree, rules, READMEs, metadata, definitions)
+# and prints/copies/writes it. The /project-audit skill drives the multi-agent
+# audit on top and writes the bug JSON consumed by ai-jira-draft.
+set -euo pipefail
+
+_resolve_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+_BIN_DIR="$(_resolve_dir)"
+_LIB_DIR="$(cd "$_BIN_DIR/.." && pwd)/lib"
+
+# shellcheck source=/dev/null
+. "$_LIB_DIR/common.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/clipboard.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/git.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/context.sh"
+
+AGH_PROMPT_NAME="project-audit.md"
+AGH_PROJECT_MODE=1
+AGH_ALLOW_PR=0
+read -r -d '' AGH_USAGE <<'EOF' || true
+ai-project-audit — generate a whole-project high/medium bug-audit prompt.
+
+USAGE:
+  ai-project-audit [options]
+
+Audits the WHOLE current repository for high/medium bugs (low-impact nits are out
+of scope). Each bug is attributed to a system block and its dependents (blast
+radius). Takes no base ref, --pr, or --staged.
+
+OPTIONS:
+  --copy              Copy the generated prompt to the clipboard.
+  --cursor            Copy, then open a new Cursor chat tab and paste (macOS).
+  --cursor-submit     Like --cursor, but also press Return to send it.
+  --out FILE          Write the generated prompt to FILE.
+  --no-project-rules  Skip the repo's own .cursor/rules / CLAUDE.md / AGENTS.md.
+  --no-tool-rules     Skip this toolkit's rules.
+  --no-readmes        Skip README context.
+  -h, --help          Show this help.
+
+ENV:
+  AGH_TREE_CAP        Max files listed in the file tree (default 400).
+  AGH_SYMBOLS_CAP     Max lines in the definition inventory (default 500).
+
+EXAMPLES:
+  ai-project-audit --copy
+  ai-project-audit --out /tmp/project-audit.md
+
+This tool NEVER posts to GitHub or modifies anything.
+EOF
+
+agh_run "$@"
