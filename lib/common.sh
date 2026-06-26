@@ -158,28 +158,42 @@ agh_resolve_base_ref() {
 
 # --- Temp file handling ---------------------------------------------------
 
-# Registry of temp files to clean up on exit.
-AGH_TMP_FILES=()
+# All temp files for a run live inside ONE working directory, created in the
+# parent shell and removed wholesale by the cleanup trap. A per-file registry
+# does NOT work here: agh_mktemp is always called via command substitution
+# (`x="$(agh_mktemp)"`), so any array append would run in that subshell and never
+# reach the parent shell — the directory approach sidesteps that entirely.
+AGH_TMP_DIR=""
 
-# Create a temp file, register it for cleanup, and print its path.
+# Ensure the run's work directory exists. Safe to call repeatedly (a no-op once
+# created). Must be called from the parent shell (not inside `$(...)`), so the
+# AGH_TMP_DIR assignment persists; agh_install_cleanup_trap does this up front.
+agh_init_tmp_dir() {
+  if [ -z "$AGH_TMP_DIR" ] || [ ! -d "$AGH_TMP_DIR" ]; then
+    AGH_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ai-gh-tools.XXXXXX")" || agh_die "failed to create temp dir."
+  fi
+}
+
+# Create a temp file inside the run's work dir and print its path. The whole dir
+# is cleaned up on exit, so individual files need no separate registration.
 agh_mktemp() {
+  agh_init_tmp_dir
   local tmp
-  tmp="$(mktemp "${TMPDIR:-/tmp}/ai-gh-tools.XXXXXX")" || agh_die "failed to create temp file."
-  AGH_TMP_FILES+=("$tmp")
+  tmp="$(mktemp "$AGH_TMP_DIR/tmp.XXXXXX")" || agh_die "failed to create temp file."
   printf '%s' "$tmp"
 }
 
-# Remove all registered temp files. Safe to call multiple times.
+# Remove the run's work directory and everything in it. Safe to call repeatedly.
 agh_cleanup_tmp() {
-  local f
-  for f in "${AGH_TMP_FILES[@]:-}"; do
-    [ -n "$f" ] && rm -f "$f" 2>/dev/null || true
-  done
-  AGH_TMP_FILES=()
+  [ -n "$AGH_TMP_DIR" ] && rm -rf "$AGH_TMP_DIR" 2>/dev/null || true
+  AGH_TMP_DIR=""
 }
 
-# Install the cleanup trap. Call once from the entrypoint after sourcing.
+# Install the cleanup trap AND create the run's work dir in the current (parent)
+# shell, so files created later via `$(agh_mktemp)` live under a directory the
+# trap can actually remove. Call once from the entrypoint after sourcing.
 agh_install_cleanup_trap() {
+  agh_init_tmp_dir
   trap 'agh_cleanup_tmp' EXIT INT TERM
 }
 
