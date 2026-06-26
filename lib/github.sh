@@ -32,15 +32,26 @@ agh_gh_current_user() {
   gh api user --jq .login 2>/dev/null
 }
 
+# Strip any embedded credentials (user[:token]@) from a remote URL so a token in
+# an https://user:token@github.com/... remote is never echoed. Leaves scp-style
+# SSH URLs (git@github.com:owner/repo) untouched — that has no secret.
+_agh_redact_remote_url() {
+  printf '%s' "$1" | sed -E 's#(://)[^/@]*@#\1#'
+}
+
 # Print the gh identity + the target repo to stderr, for error context.
-# Reads OPT_REPO (override) or falls back to the origin remote URL.
+#   $1 = repo override (the caller's OPT_REPO); falls back to the origin remote.
 agh_gh_print_identity() {
-  local who repo
-  who="$(agh_gh_current_user)"
-  if [ -n "${OPT_REPO:-}" ]; then
-    repo="$OPT_REPO"
+  local repo_override="${1:-}" who repo
+  # These run under `set -e` and fail precisely in the broken states this
+  # diagnostic exists to explain (gh not logged in / no origin remote), so keep
+  # them non-fatal — otherwise the function aborts before printing anything.
+  who="$(agh_gh_current_user)" || who=""
+  if [ -n "$repo_override" ]; then
+    repo="$repo_override"
   else
-    repo="$(git config --get remote.origin.url 2>/dev/null)"
+    repo="$(git config --get remote.origin.url 2>/dev/null)" || repo=""
+    [ -n "$repo" ] && repo="$(_agh_redact_remote_url "$repo")"
   fi
   agh_err "  gh authenticated as : ${who:-<not logged in>}"
   agh_err "  target repo         : ${repo:-<unknown>}"

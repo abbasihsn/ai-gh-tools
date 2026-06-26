@@ -70,6 +70,10 @@ comments" section, and tag each comment with the perspective it came from.
    unused imports, function size/complexity (prefer early returns over deep
    nesting), naming conventions, minimal public surface, and consistency with
    existing patterns in the touched area.
+9. **Performance / efficiency reviewer** — algorithmic complexity, redundant
+   work or repeated I/O, N+1 / repeated network or subprocess calls, blocking
+   calls on hot paths, unbounded memory/result growth, and missing
+   batching/caching/pagination.
 
 ## Severity scale
 
@@ -117,7 +121,8 @@ be discussed by number. Start each with `### N. [severity] short title`, then:
 
 - **Severity:** [high|medium|low].
 - **Agent:** which perspective it came from (Architecture / Correctness / Typing
-  / Logging-Security / Config-DevOps / Testing / Docs / Code-quality).
+  / Logging-Security / Config-DevOps / Performance / Testing / Docs /
+  Code-quality).
 - **Call site:** `path:line` — real file path + the **actual line number** from
   the diff so it is clickable (post-change line for added/changed lines; a range
   `path:start-end` if it spans lines). Never just a symbol name without a line.

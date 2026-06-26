@@ -21,7 +21,7 @@ template, then use your live repo access to make the description accurate.
 ## Step 2 — Generate the context file
 
 ```bash
-ai-draft-pr <ARGS> --out "$TMPDIR/agh-draft.md"
+ai-draft-pr <ARGS> --out "${TMPDIR:-/tmp}/agh-draft.md"
 ```
 
 If the tool isn't on `PATH`, tell the user to run `./install.sh` and stop. On a

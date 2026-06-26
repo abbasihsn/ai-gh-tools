@@ -356,7 +356,7 @@ _agh_build_pr() {
   # being logged in as the wrong account, or org SSO not being authorized.
   if ! agh_gh_pr_accessible "$OPT_PR"; then
     agh_err "could not fetch PR '$OPT_PR' via gh."
-    agh_gh_print_identity
+    agh_gh_print_identity "${OPT_REPO:-}"
     agh_err "Likely that account can't access this repo (wrong account or org SSO not authorized)."
     agh_err "Fix: 'gh auth status' · 'gh auth switch' / 'gh auth login' (right account) · 'gh auth refresh' (authorize org SSO)."
     agh_err "Then verify with: gh pr view $OPT_PR"
@@ -378,7 +378,7 @@ _agh_build_pr() {
 
   if [ ! -s "$diff_tmp" ]; then
     agh_err "PR '$OPT_PR' returned an EMPTY diff via gh — nothing to review; aborting (no prompt generated)."
-    agh_gh_print_identity
+    agh_gh_print_identity "${OPT_REPO:-}"
     agh_err "Verify with: gh pr diff $OPT_PR"
     agh_err "If this PR should have changes, it's likely org SSO scope ('gh auth refresh') or the wrong gh account ('gh auth switch'); or double-check the PR number."
     exit 1

@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # install.sh — install the ai-gh-tools commands for the current user.
 #
-# What it does (all local, idempotent, and reversible):
+# What it does (all local and idempotent):
 #   1. Detects this repo's directory.
 #   2. Symlinks bin/* into ~/.local/bin and makes the sources executable.
+#   2b. Symlinks the Claude Code skills + reviewer subagents into ~/.claude
+#       (skip with AGH_INSTALL_SKILLS=0); optionally into a repo's .cursor/ tree
+#       via --cursor-project DIR.
 #   3. Ensures ~/.local/bin is on PATH via your shell rc file.
 #   4. Creates convenience git aliases.
 #   5. Prints usage examples.
 #
+# Re-running cleans up symlinks for renamed/removed commands, skills, and agents.
 # It does NOT touch GitHub or any target repo.
 set -euo pipefail
 
@@ -18,6 +22,10 @@ AGENTS_SRC="$REPO_DIR/agents"
 INSTALL_DIR="${AGH_INSTALL_DIR:-$HOME/.local/bin}"
 SKILLS_DIR="${AGH_SKILLS_DIR:-$HOME/.claude/skills}"
 AGENTS_DIR="${AGH_AGENTS_DIR:-$HOME/.claude/agents}"
+
+# Set AGH_INSTALL_SKILLS=0 to skip the global ~/.claude skills + subagents
+# install (e.g. if you only use the CLI). --cursor-project is unaffected.
+INSTALL_SKILLS="${AGH_INSTALL_SKILLS:-1}"
 
 # Optional: also install skills + agents into a target project's .cursor/ tree.
 # Cursor only reads project-scoped skills (.cursor/skills), so pass the repo you
@@ -47,6 +55,11 @@ AGENTS=(
 OBSOLETE_COMMANDS=(ai-create-pr)
 OBSOLETE_GIT_ALIASES=(ai-create-pr)
 
+# Skills/agents retired in past versions, cleaned up on (re)install the same way
+# (only our own symlinks are removed, never real files). None retired yet.
+OBSOLETE_SKILLS=()
+OBSOLETE_AGENTS=()
+
 info() { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -70,6 +83,12 @@ OPTIONS:
   --cursor-project DIR   Also install the skills + reviewer subagents into DIR's
                          .cursor/skills and .cursor/agents (Cursor is project-
                          scoped and has no global skills dir). DIR must be a repo.
+
+ENV:
+  AGH_INSTALL_SKILLS=0   Skip the global ~/.claude skills + subagents install.
+  AGH_INSTALL_DIR        Override the command install dir (default ~/.local/bin).
+  AGH_SKILLS_DIR         Override the global skills dir (default ~/.claude/skills).
+  AGH_AGENTS_DIR         Override the global agents dir (default ~/.claude/agents).
 USAGE
       exit 0 ;;
     *)
@@ -81,7 +100,6 @@ done
 link_skills() {
   local src_root="$1" dest_dir="$2" name src link
   [ -d "$src_root" ] || { info "  no skills/ at $src_root; skipping"; return 0; }
-  mkdir -p "$dest_dir"
   for name in "${SKILLS[@]}"; do
     src="$src_root/$name"
     if [ ! -f "$src/SKILL.md" ]; then
@@ -92,6 +110,9 @@ link_skills() {
     if [ -e "$link" ] && [ ! -L "$link" ]; then
       warn "skipping skill '$name': $link exists and is not a symlink"; continue
     fi
+    # Create the dest dir lazily, only once we have something to link, so we
+    # don't leave an empty .cursor/skills behind when nothing matched.
+    mkdir -p "$dest_dir"
     ln -sfn "$src" "$link"
     info "  linked skill $link -> $src"
   done
@@ -101,7 +122,6 @@ link_skills() {
 link_agents() {
   local src_root="$1" dest_dir="$2" name src link
   [ -d "$src_root" ] || { info "  no agents/ at $src_root; skipping"; return 0; }
-  mkdir -p "$dest_dir"
   for name in "${AGENTS[@]}"; do
     src="$src_root/$name.md"
     if [ ! -f "$src" ]; then
@@ -111,8 +131,25 @@ link_agents() {
     if [ -e "$link" ] && [ ! -L "$link" ]; then
       warn "skipping agent '$name': $link exists and is not a symlink"; continue
     fi
+    # Create the dest dir lazily (see link_skills).
+    mkdir -p "$dest_dir"
     ln -sfn "$src" "$link"
     info "  linked agent $link -> $src"
+  done
+}
+
+# Remove our own (symlink-only) installs for retired skill/agent names so an
+# upgrade doesn't leave dangling links behind (mirrors OBSOLETE_COMMANDS).
+#   $1 = dest dir   $2 = name suffix ("" skills, ".md" agents)   $3.. = names
+unlink_obsolete() {
+  local dest_dir="$1" suffix="$2"; shift 2
+  local name link
+  for name in "$@"; do
+    link="$dest_dir/$name$suffix"
+    if [ -L "$link" ]; then
+      rm -f "$link"
+      info "  removed obsolete $link"
+    fi
   done
 }
 
@@ -144,9 +181,15 @@ done
 chmod +x "$REPO_DIR"/lib/*.sh 2>/dev/null || true
 
 # 2b. Install Claude Code skills + reviewer subagents globally (~/.claude/...)
-# so they're available in every repo.
-link_skills "$SKILLS_SRC" "$SKILLS_DIR"
-link_agents "$AGENTS_SRC" "$AGENTS_DIR"
+# so they're available in every repo. Skip with AGH_INSTALL_SKILLS=0.
+if [ "$INSTALL_SKILLS" = "1" ]; then
+  unlink_obsolete "$SKILLS_DIR" ""    "${OBSOLETE_SKILLS[@]+"${OBSOLETE_SKILLS[@]}"}"
+  unlink_obsolete "$AGENTS_DIR" ".md" "${OBSOLETE_AGENTS[@]+"${OBSOLETE_AGENTS[@]}"}"
+  link_skills "$SKILLS_SRC" "$SKILLS_DIR"
+  link_agents "$AGENTS_SRC" "$AGENTS_DIR"
+else
+  info "  skipping global skills/agents install (AGH_INSTALL_SKILLS=0)"
+fi
 
 # 2c. Optionally install into a target project's .cursor/ tree. Cursor has no
 # global skills dir, so skills must live inside each repo you use them in.
@@ -155,7 +198,15 @@ if [ -n "$CURSOR_PROJECT" ]; then
     die "--cursor-project '$CURSOR_PROJECT' is not a directory."
   fi
   proj="$(cd -P "$CURSOR_PROJECT" >/dev/null 2>&1 && pwd)"
+  # Cursor only reads project-scoped skills from a repo's .cursor/ tree, so the
+  # target must actually be a git repo (the docs/usage promise this).
+  if command -v git >/dev/null 2>&1 && \
+     ! git -C "$proj" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    die "--cursor-project '$proj' is not a git repo."
+  fi
   info "Installing Cursor skills + agents into: $proj/.cursor"
+  unlink_obsolete "$proj/.cursor/skills" ""    "${OBSOLETE_SKILLS[@]+"${OBSOLETE_SKILLS[@]}"}"
+  unlink_obsolete "$proj/.cursor/agents" ".md" "${OBSOLETE_AGENTS[@]+"${OBSOLETE_AGENTS[@]}"}"
   link_skills "$SKILLS_SRC" "$proj/.cursor/skills"
   link_agents "$AGENTS_SRC" "$proj/.cursor/agents"
 fi

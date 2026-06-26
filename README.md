@@ -51,9 +51,19 @@ cd ai-gh-tools
 - make them executable,
 - add `~/.local/bin` to your `PATH` (in `.zshrc` or `.bashrc`) if missing,
 - create git aliases (`git ai-gh`, `git ai-review`, `git ai-explain`,
-  `git ai-draft-pr`, `git ai-open-pr`).
+  `git ai-draft-pr`, `git ai-open-pr`),
+- install the Claude Code skills (`/pr-review`, `/explain-pr`, `/draft-pr`,
+  `/open-pr`) and the reviewer subagents into `~/.claude/skills` and
+  `~/.claude/agents` (set `AGH_INSTALL_SKILLS=0` to skip).
 
 Open a new shell (or `source ~/.zshrc`) afterwards.
+
+To also install the skills + subagents into a specific repo for **Cursor**
+(which only reads project-scoped skills), pass the repo path:
+
+```bash
+./install.sh --cursor-project /path/to/your/repo
+```
 
 ## Command examples
 
@@ -294,6 +304,8 @@ ai-gh-tools/
   prompts/        # the AI instruction templates
   rules/          # general.mdc + optional rules/<repo-name>.mdc overlays
   templates/      # pr-body.md (the team PR template used by ai-open-pr)
+  skills/         # Claude Code / Cursor SKILL.md flows (pr-review, explain-pr, …)
+  agents/         # review-* reviewer subagents (used by /pr-review --deep)
   examples/       # sample generated output
   tests/          # deterministic unit tests for the shared helpers
   install.sh
@@ -303,7 +315,8 @@ ai-gh-tools/
 ## Running the tests
 
 The pure shell helpers (branch humanizing, the `--exclude` glob filters,
-remote-owner parsing) have deterministic unit tests:
+remote-owner parsing, and project-rules gathering — `.cursor/rules`,
+`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) have deterministic unit tests:
 
 ```bash
 ./tests/test_helpers.sh

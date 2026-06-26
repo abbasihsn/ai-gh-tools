@@ -21,7 +21,7 @@ Do not use `--copy`/`--cursor`/`--symbols`.
 ## Step 2 — Generate the context file
 
 ```bash
-ai-explain-pr <ARGS> --out "$TMPDIR/agh-explain.md"
+ai-explain-pr <ARGS> --out "${TMPDIR:-/tmp}/agh-explain.md"
 ```
 
 If the tool isn't on `PATH`, tell the user to run `./install.sh` and stop. On a

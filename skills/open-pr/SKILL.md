@@ -37,13 +37,13 @@ Unless the user passed `--body-file` or asked to skip it, draft a real body so t
 PR isn't just the blank template. Reuse the **draft-pr** flow:
 
 ```bash
-ai-draft-pr <BASE_REF> --out "$TMPDIR/agh-openpr-body.md"
+ai-draft-pr <BASE_REF> --out "${TMPDIR:-/tmp}/agh-openpr-body.md"
 ```
 
 Read that file, fill the team template against what the diff actually contains
 (confirm against real files; do not invent features/tests/rollout steps), and
 write the finished body — the template starting at `### Description`, no title
-line — back to `$TMPDIR/agh-openpr-body.md`. You'll pass it as `--body-file`.
+line — back to `${TMPDIR:-/tmp}/agh-openpr-body.md`. You'll pass it as `--body-file`.
 Capture the drafted title to pass via `--title`.
 
 ## Step 3 — Dry-run and show the plan
@@ -53,7 +53,7 @@ base, head, title, and body that would be used:
 
 ```bash
 ai-open-pr <BASE_REF> [--ticket ID] [--draft] \
-  --title "<DRAFTED TITLE>" --body-file "$TMPDIR/agh-openpr-body.md" --dry-run
+  --title "<DRAFTED TITLE>" --body-file "${TMPDIR:-/tmp}/agh-openpr-body.md" --dry-run
 ```
 
 Surface its summary. If it exits non-zero (detached HEAD, branch == base, nothing

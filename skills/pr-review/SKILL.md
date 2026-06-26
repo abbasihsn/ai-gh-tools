@@ -41,7 +41,7 @@ clipboard path and the symbol-inventory fallback are unnecessary.
 Run the tool, writing to a temp file (it never modifies the repo or GitHub):
 
 ```bash
-ai-pr-review <PASSED-THROUGH-ARGS> --out "$TMPDIR/agh-review.md"
+ai-pr-review <PASSED-THROUGH-ARGS> --out "${TMPDIR:-/tmp}/agh-review.md"
 ```
 
 If `ai-pr-review` is not on `PATH`, tell the user to run `./install.sh` from the

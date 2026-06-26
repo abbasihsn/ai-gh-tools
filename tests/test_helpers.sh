@@ -40,6 +40,16 @@ contains() {
   check "$1" "$4" "$got"
 }
 
+# order_ok HAYSTACK FIRST SECOND -> "yes" if FIRST occurs before SECOND (both
+# must be present), else "no". Used to assert deterministic source ordering.
+order_ok() {
+  local h="$1" a="$2" b="$3" pa pb
+  case "$h" in *"$a"*) ;; *) printf 'no'; return ;; esac
+  case "$h" in *"$b"*) ;; *) printf 'no'; return ;; esac
+  pa="${h%%"$a"*}"; pb="${h%%"$b"*}"
+  if [ "${#pa}" -lt "${#pb}" ]; then printf 'yes'; else printf 'no'; fi
+}
+
 # --- agh_humanize_branch --------------------------------------------------
 check "humanize drops type prefix and dashes" "Add fast resize" \
   "$(agh_humanize_branch 'feat/add-fast-resize')"
@@ -114,6 +124,14 @@ contains "project rules recurse into nested dirs"     "$RULES_OUT" "CURSOR_NESTE
 contains "project rules include .cursorrules"         "$RULES_OUT" "LEGACY_CURSORRULES" "present"
 contains "project rules include CLAUDE.md"            "$RULES_OUT" "CLAUDE_RULE"        "present"
 contains "project rules include AGENTS.md"            "$RULES_OUT" "AGENTS_RULE"        "present"
+# Ordering: sources must appear in the documented order
+# (.cursor/rules sorted -> .cursorrules -> CLAUDE.md -> AGENTS.md).
+check "rules order: .cursor top before nested"   "yes" "$(order_ok "$RULES_OUT" CURSOR_TOP_RULE CURSOR_NESTED_RULE)"
+check "rules order: .cursor before .cursorrules" "yes" "$(order_ok "$RULES_OUT" CURSOR_NESTED_RULE LEGACY_CURSORRULES)"
+check "rules order: .cursorrules before CLAUDE"  "yes" "$(order_ok "$RULES_OUT" LEGACY_CURSORRULES CLAUDE_RULE)"
+check "rules order: CLAUDE before AGENTS"        "yes" "$(order_ok "$RULES_OUT" CLAUDE_RULE AGENTS_RULE)"
+# Dedup: exactly one heading per rule file (5), no file emitted twice.
+check "rules emit one heading per file (no dups)" "5" "$(printf '%s\n' "$RULES_OUT" | grep -c '^### ')"
 RULES_OFF="$(AGH_NO_PROJECT_RULES=1 agh_print_project_rules "$RULES_REPO")"
 check "no-project-rules suppresses output" "" "$RULES_OFF"
 EMPTY_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-empty.XXXXXX")"
