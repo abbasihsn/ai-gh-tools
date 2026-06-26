@@ -11,6 +11,8 @@ ROOT="$(cd "$HERE/.." && pwd)"
 # shellcheck source=/dev/null
 . "$ROOT/lib/common.sh"
 # shellcheck source=/dev/null
+. "$ROOT/lib/git.sh"
+# shellcheck source=/dev/null
 . "$ROOT/lib/github.sh"
 # shellcheck source=/dev/null
 . "$ROOT/lib/submit.sh"
@@ -137,6 +139,68 @@ check "no-project-rules suppresses output" "" "$RULES_OFF"
 EMPTY_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-empty.XXXXXX")"
 check "no rule files -> empty output" "" "$(agh_print_project_rules "$EMPTY_REPO")"
 rm -rf "$RULES_REPO" "$EMPTY_REPO"
+
+# --- agh_git_all_files / agh_print_file_tree (whole-project mode) ----------
+TREE_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-tree.XXXXXX")"
+(
+  cd "$TREE_REPO" || exit 1
+  git init -q
+  mkdir -p lib bin
+  printf 'top\n'    >README.md
+  printf 'engine\n' >lib/common.sh
+  printf 'util\n'   >lib/util.sh
+  printf 'cli\n'    >bin/tool
+  printf '%s\n' 'def real_def():' '    pass' '' 'do_work()'  >app.py
+  # shell file: a paren def, a `function`-keyword def, a builtin call, a
+  # braceless call (the last two must NOT be picked up as definitions).
+  printf '%s\n' 'my_shell_fn() {' '  echo hi' '}' \
+                'function fn_kw {' '  :' '}' \
+                'type some_builtin_call' \
+                'bare_call()' >lib/fns.sh
+  git add -A
+)
+ALL_FILES="$(cd "$TREE_REPO" && agh_git_all_files)"
+contains "all-files lists tracked lib file" "$ALL_FILES" "lib/common.sh" "present"
+contains "all-files lists tracked bin file" "$ALL_FILES" "bin/tool"      "present"
+contains "all-files lists root file"        "$ALL_FILES" "README.md"     "present"
+
+# count for a block from the tree output (awk: count is $1, block name is $2)
+tree_block_count() { printf '%s\n' "$1" | awk -v b="$2" '$2==b {print $1; exit}'; }
+
+TREE_OUT="$(agh_print_file_tree "$TREE_REPO")"
+contains "file-tree has section header"    "$TREE_OUT" "## Project files (whole repo)" "present"
+contains "file-tree has per-block section" "$TREE_OUT" "Files per top-level block"     "present"
+contains "file-tree lists a tracked file"  "$TREE_OUT" "lib/common.sh"                 "present"
+check "file-tree counts lib block (3 files)" "3" "$(tree_block_count "$TREE_OUT" lib)"
+check "file-tree counts bin block (1 file)"  "1" "$(tree_block_count "$TREE_OUT" bin)"
+
+# AGH_TREE_CAP truncates and reports the remainder
+contains "file-tree truncates at AGH_TREE_CAP=1" \
+  "$(AGH_TREE_CAP=1 agh_print_file_tree "$TREE_REPO")" "more files truncated" "present"
+# Invalid / zero / negative caps must NOT break the listing; _agh_cap falls back
+# to the default (so the file list still appears, with no truncation/crash).
+contains "invalid AGH_TREE_CAP falls back (still lists files)" \
+  "$(AGH_TREE_CAP=abc agh_print_file_tree "$TREE_REPO")" "lib/common.sh" "present"
+contains "AGH_TREE_CAP=0 falls back (still lists files)" \
+  "$(AGH_TREE_CAP=0 agh_print_file_tree "$TREE_REPO")" "lib/common.sh" "present"
+contains "negative AGH_TREE_CAP falls back (still lists files)" \
+  "$(AGH_TREE_CAP=-3 agh_print_file_tree "$TREE_REPO")" "lib/common.sh" "present"
+
+# --- agh_print_symbol_inventory --------------------------------------------
+SYM_ON="$(AGH_WITH_SYMBOLS=1 agh_print_symbol_inventory "$TREE_REPO")"
+contains "symbol inventory detects shell paren def"     "$SYM_ON" "my_shell_fn"        "present"
+contains "symbol inventory detects function-keyword def" "$SYM_ON" "fn_kw"             "present"
+contains "symbol inventory detects keyword def"         "$SYM_ON" "real_def"           "present"
+contains "symbol inventory excludes python bare call"   "$SYM_ON" "do_work"            "absent"
+contains "symbol inventory excludes shell builtin call" "$SYM_ON" "some_builtin_call"  "absent"
+contains "symbol inventory excludes braceless shell call" "$SYM_ON" "bare_call"        "absent"
+# AGH_SYMBOLS_CAP truncates the inventory
+contains "symbol inventory truncates at AGH_SYMBOLS_CAP=1" \
+  "$(AGH_WITH_SYMBOLS=1 AGH_SYMBOLS_CAP=1 agh_print_symbol_inventory "$TREE_REPO")" \
+  "more definitions truncated" "present"
+contains "symbol inventory is off without --symbols" \
+  "$(agh_print_symbol_inventory "$TREE_REPO")" "my_shell_fn" "absent"
+rm -rf "$TREE_REPO"
 
 # --- Summary --------------------------------------------------------------
 printf '\n%s test(s), %s failure(s)\n' "$TESTS" "$FAILS"

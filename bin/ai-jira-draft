@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# ai-jira-draft — generate a prompt that turns audited bugs into Jira tickets.
+#
+# Read-only: never posts comments, reviews, pushes, or files tickets. It reads the
+# bug JSON produced by ai-project-audit (--from FILE), embeds it with repo context,
+# and assembles a prompt that validates each bug and drafts a humanized Jira
+# title + description.
+set -euo pipefail
+
+_resolve_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+_BIN_DIR="$(_resolve_dir)"
+_LIB_DIR="$(cd "$_BIN_DIR/.." && pwd)/lib"
+
+# shellcheck source=/dev/null
+. "$_LIB_DIR/common.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/clipboard.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/git.sh"
+# shellcheck source=/dev/null
+. "$_LIB_DIR/context.sh"
+
+AGH_PROMPT_NAME="jira-draft.md"
+AGH_FROM_MODE=1
+AGH_ALLOW_PR=0
+read -r -d '' AGH_USAGE <<'EOF' || true
+ai-jira-draft — turn audited bugs into humanized Jira tickets.
+
+USAGE:
+  ai-jira-draft --from FILE [options]
+
+Reads the bug JSON written by ai-project-audit and assembles a prompt that
+re-validates each bug against the live code and drafts a plain-language Jira
+title + description per bug.
+
+REQUIRED:
+  --from FILE         Path to the bug JSON (the file ai-project-audit produced,
+                      e.g. ${TMPDIR:-/tmp}/agh-audit-bugs.json).
+
+OPTIONS:
+  --copy              Copy the generated prompt to the clipboard.
+  --cursor            Copy, then open a new Cursor chat tab and paste (macOS).
+  --cursor-submit     Like --cursor, but also press Return to send it.
+  --out FILE          Write the generated prompt to FILE.
+  --no-tool-rules     Skip this toolkit's rules.
+  -h, --help          Show this help.
+
+EXAMPLES:
+  ai-jira-draft --from "${TMPDIR:-/tmp}/agh-audit-bugs.json" --copy
+  ai-jira-draft --from bugs.json --out /tmp/jira-tickets.md
+
+This tool NEVER posts to GitHub/Jira or modifies anything.
+EOF
+
+agh_run "$@"

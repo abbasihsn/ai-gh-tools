@@ -238,6 +238,7 @@ agh_reset_opts() {
   OPT_CURSOR=0
   AGH_CURSOR_SUBMIT=0
   OPT_TICKET=""
+  OPT_FROM=""
   OPT_EXCLUDES=()
   # Context toggles are exported as env-style flags read by context.sh.
   AGH_NO_PROJECT_RULES=""
@@ -295,6 +296,13 @@ agh_parse_args() {
         OPT_TICKET="$2"; shift 2 ;;
       --ticket=*)
         OPT_TICKET="${1#*=}"; shift ;;
+      --from)
+        [ "${AGH_FROM_MODE:-0}" = "1" ] || agh_die "this command does not support --from."
+        [ "$#" -ge 2 ] || agh_die "--from requires a FILE value (the bug JSON from ai-project-audit)."
+        OPT_FROM="$2"; shift 2 ;;
+      --from=*)
+        [ "${AGH_FROM_MODE:-0}" = "1" ] || agh_die "this command does not support --from."
+        OPT_FROM="${1#*=}"; shift ;;
       --no-project-rules)
         AGH_NO_PROJECT_RULES=1; shift ;;
       --no-tool-rules)
@@ -342,6 +350,29 @@ agh_parse_args() {
   fi
   if [ "${AGH_WITH_SYMBOLS:-}" = "1" ] && [ -n "$OPT_PR" ]; then
     agh_warn "--symbols has no effect in --pr mode (local/staged only); ignoring it."
+  fi
+
+  # Whole-project mode (explain / audit): no change set is involved.
+  if [ "${AGH_PROJECT_MODE:-0}" = "1" ]; then
+    [ -z "$OPT_BASE" ] || agh_die "this command reviews the whole project; it takes no base ref ('$OPT_BASE')."
+    [ "$OPT_STAGED" != "1" ] || agh_die "this command reviews the whole project; --staged is not supported."
+    # These are accepted by the parser but unused in whole-project mode; warn
+    # rather than silently ignore so a user isn't misled.
+    [ -z "$OPT_TICKET" ] || agh_warn "--ticket has no effect in whole-project mode; ignoring it."
+    [ "$OPT_INCLUDE_WT" != "1" ] || agh_warn "--include-working-tree has no effect in whole-project mode; ignoring it."
+  fi
+  # From-file mode (jira-draft): consumes a bug file, not a change set.
+  if [ "${AGH_FROM_MODE:-0}" = "1" ]; then
+    [ -n "$OPT_FROM" ] || agh_die "--from FILE is required (the bug JSON written by ai-project-audit)."
+    [ -z "$OPT_BASE" ] || agh_die "this command takes --from FILE, not a base ref ('$OPT_BASE')."
+    [ "$OPT_STAGED" != "1" ] || agh_die "this command takes --from FILE; --staged is not supported."
+    [ "$OPT_INCLUDE_WT" != "1" ] || agh_die "this command takes --from FILE; --include-working-tree is not supported."
+    # jira-draft embeds only the bug JSON + metadata + toolkit rules, so these
+    # context toggles do nothing here; warn rather than silently ignore.
+    if [ "${AGH_NO_PROJECT_RULES:-}" = "1" ] || [ "${AGH_NO_READMES:-}" = "1" ] || [ "${AGH_WITH_SYMBOLS:-}" = "1" ]; then
+      agh_warn "--no-project-rules / --no-readmes / --symbols have no effect in jira-draft mode; ignoring them."
+    fi
+    [ -z "$OPT_TICKET" ] || agh_warn "--ticket has no effect in jira-draft mode; ignoring it."
   fi
 }
 
@@ -488,10 +519,64 @@ _agh_build_local() {
   } >"$out"
 }
 
+# Assemble the full prompt for whole-project mode (explain / audit). There is no
+# diff: the context is the whole tracked tree, the repo rules, READMEs, metadata,
+# and the symbol inventory (forced on so the AI gets a definition map even when a
+# non-agentic tool consumes the prompt).
+_agh_build_project() {
+  local out="$1"
+  agh_require_git_repo
+
+  local repo_root repo_name
+  repo_root="$(agh_repo_root)"
+  repo_name="$(agh_repo_name)"
+
+  # Whole-project review always wants the definition inventory.
+  AGH_WITH_SYMBOLS=1
+
+  {
+    agh_print_toolkit_prompt "$AGH_PROMPT_NAME"
+    agh_print_toolkit_rules "$repo_name"
+    agh_print_project_rules "$repo_root"
+    agh_print_readmes "$repo_root" ""
+    agh_print_repo_metadata "$repo_root" "$repo_name"
+    agh_print_file_tree "$repo_root"
+    agh_print_symbol_inventory "$repo_root"
+  } >"$out"
+}
+
+# Assemble the prompt for jira-draft mode: embed the bug file produced by
+# ai-project-audit plus repo context, so the AI can re-validate each bug against
+# the live code and draft humanized Jira tickets.
+_agh_build_jira() {
+  local out="$1"
+  agh_require_git_repo
+  # Presence of --from is validated in agh_parse_args; here we only confirm the
+  # file exists (the one check the parser can't do).
+  [ -f "$OPT_FROM" ] || agh_die "--from file not found: $OPT_FROM"
+
+  local repo_root repo_name
+  repo_root="$(agh_repo_root)"
+  repo_name="$(agh_repo_name)"
+
+  {
+    agh_print_toolkit_prompt "$AGH_PROMPT_NAME"
+    agh_print_toolkit_rules "$repo_name"
+    agh_print_repo_metadata "$repo_root" "$repo_name"
+    printf '\n## Bugs to turn into Jira tickets (from ai-project-audit)\n\n'
+    printf -- '- source file: %s\n\n' "$OPT_FROM"
+    printf '```json\n'
+    cat -- "$OPT_FROM"
+    printf '\n```\n'
+  } >"$out"
+}
+
 # Entry point: parse args, build the prompt, deliver it.
 agh_run() {
   : "${AGH_PROMPT_NAME:?AGH_PROMPT_NAME must be set by the entrypoint}"
   : "${AGH_ALLOW_PR:=0}"
+  : "${AGH_PROJECT_MODE:=0}"
+  : "${AGH_FROM_MODE:=0}"
   agh_reset_opts
   agh_install_cleanup_trap
   agh_parse_args "$@"
@@ -501,7 +586,11 @@ agh_run() {
 
   local out
   out="$(agh_mktemp)"
-  if [ -n "$OPT_PR" ]; then
+  if [ "$AGH_FROM_MODE" = "1" ]; then
+    _agh_build_jira "$out"
+  elif [ "$AGH_PROJECT_MODE" = "1" ]; then
+    _agh_build_project "$out"
+  elif [ -n "$OPT_PR" ]; then
     _agh_build_pr "$out"
   else
     _agh_build_local "$out"

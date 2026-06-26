@@ -203,30 +203,92 @@ agh_print_staged_metadata() {
   printf -- '- branch: %s\n' "$(agh_current_branch)"
 }
 
-# Inventory of existing function/class/method definitions across the repo, so a
-# reviewer can detect duplication against code that is NOT in the diff (i.e. what
-# already exists on the base/main). Local checkout is the source of truth, so
-# this is only meaningful in local/staged mode.
+# Normalize a user-supplied cap (env var) to a positive integer, falling back to
+# the given default. Guards against non-numeric / zero / negative values, which
+# would otherwise make `head -n "$cap"` fail and abort the run under `set -e`.
+#   $1 = raw value   $2 = default
+_agh_cap() {
+  case "$1" in
+    ''|*[!0-9]*) printf '%s' "$2"; return ;;
+  esac
+  # $1 is all digits here. Reject 0 and absurdly long values (>9 digits would make
+  # `[ -gt ]` warn about integer overflow); 9 digits is already far past any file
+  # count. The `&&` short-circuits before the numeric test on over-long input.
+  if [ "${#1}" -le 9 ] && [ "$1" -gt 0 ]; then printf '%s' "$1"; else printf '%s' "$2"; fi
+}
+
+# Whole-project file inventory: every tracked file, with a per-top-level-block
+# count and the full list (capped). Gives the AI the shape of the codebase for the
+# project explain/audit commands, and the block list the audit selection is built
+# from. Only meaningful in whole-project mode.
 #   $1 = repo root
-#   Opt-in: only runs when AGH_WITH_SYMBOLS=1 (the --symbols flag). It's a
-#   fallback for non-agentic AI tools; in Cursor, prefer letting the AI explore
-#   the codebase directly. AGH_SYMBOLS_CAP caps the number of lines.
+#   AGH_TREE_CAP caps the number of listed files (default 400).
+agh_print_file_tree() {
+  local root="${1:-}"
+  [ -z "$root" ] && return 0
+  command -v git >/dev/null 2>&1 || return 0
+
+  local tmp
+  tmp="$(agh_mktemp)"
+  agh_git_all_files "$root" >"$tmp" || true
+  [ -s "$tmp" ] || return 0
+
+  local total cap
+  total="$(wc -l <"$tmp" | tr -d ' ')"
+  cap="$(_agh_cap "${AGH_TREE_CAP:-}" 400)"
+
+  printf '\n## Project files (whole repo)\n\n'
+  printf -- '- tracked files: %s\n' "$total"
+
+  printf '\n### Files per top-level block\n\n'
+  printf '```\n'
+  # Count files under each top-level path segment ("(root files)" for top-level
+  # files), highest count first. awk assoc arrays are bash-3.2 safe.
+  awk -F/ '{ if (NF > 1) c[$1]++; else c["(root files)"]++ }
+           END { for (k in c) printf "%6d  %s\n", c[k], k }' "$tmp" | sort -rn
+  printf '```\n'
+
+  printf '\n### File list\n\n'
+  printf '```\n'
+  head -n "$cap" "$tmp"
+  if [ "$total" -gt "$cap" ]; then
+    printf '... (%s more files truncated; raise AGH_TREE_CAP to see more)\n' "$((total - cap))"
+  fi
+  printf '```\n'
+}
+
+# Inventory of existing function/class/method definitions across the repo, so a
+# reviewer can detect duplication against code that already exists. The local
+# checkout is the source of truth.
+#   $1 = repo root
+#   Runs when AGH_WITH_SYMBOLS=1 — set by the `--symbols` flag in local/staged
+#   mode (a fallback for non-agentic AI tools; in Cursor, prefer letting the AI
+#   explore the codebase), and forced on in whole-project mode by
+#   _agh_build_project. AGH_SYMBOLS_CAP caps the number of lines.
 agh_print_symbol_inventory() {
   local root="${1:-}"
   [ "${AGH_WITH_SYMBOLS:-}" = "1" ] || return 0
   [ -z "$root" ] && return 0
   command -v git >/dev/null 2>&1 || return 0
 
-  local cap="${AGH_SYMBOLS_CAP:-500}"
-  # Definition-like lines across common languages (captures methods via the
-  # leading-whitespace allowance, e.g. `def` inside a class).
-  local pattern='^[[:space:]]*(export[[:space:]]+)?(public[[:space:]]+|private[[:space:]]+)?(async[[:space:]]+)?(def|class|func|function|module|interface|type|struct|trait|enum)[[:space:]]+[A-Za-z_]'
+  local cap
+  cap="$(_agh_cap "${AGH_SYMBOLS_CAP:-}" 500)"
+  # Keyword-led definitions across non-shell languages (captures methods via the
+  # leading-whitespace allowance, e.g. `def` inside a class). Shell is handled by
+  # sh_pattern below — keeping shell out of this keyword set avoids matching shell
+  # builtin *calls* (`type foo`, `module bar`) as if they were definitions.
+  local kw_pattern='^[[:space:]]*(export[[:space:]]+)?(public[[:space:]]+|private[[:space:]]+)?(async[[:space:]]+)?(def|class|func|function|module|interface|type|struct|trait|enum)[[:space:]]+[A-Za-z_]'
+  # Shell function defs, matched ONLY in shell files: `name() {` (brace required,
+  # so bare call sites are excluded) or the `function name` keyword form.
+  local sh_pattern='^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{|function[[:space:]]+[A-Za-z_])'
 
   local tmp
   tmp="$(agh_mktemp)"
-  ( cd "$root" && git grep -nE "$pattern" -- \
+  ( cd "$root" && git grep -nE "$kw_pattern" -- \
       '*.py' '*.pyi' '*.js' '*.jsx' '*.ts' '*.tsx' '*.go' '*.rb' '*.rs' \
       '*.java' '*.kt' '*.cs' '*.php' '*.scala' '*.swift' 2>/dev/null ) >"$tmp" || true
+  ( cd "$root" && git grep -nE "$sh_pattern" -- \
+      '*.sh' '*.bash' 2>/dev/null ) >>"$tmp" || true
   [ -s "$tmp" ] || return 0
 
   local total

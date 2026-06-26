@@ -8,9 +8,10 @@ context gathering (diff, changed files, repo rules, README context, PR metadata)
 and hands you a single prompt to paste into your AI tool of choice. One command,
 `ai-open-pr`, additionally **commits, pushes, and opens a PR** for you.
 
-> **The three prompt tools never write to GitHub** (no comments, reviews, pushes,
-> or commits). The fourth tool, **`ai-open-pr`, does modify your repo and the
-> remote** — it confirms before each step. See [Privacy & security](#privacy--security).
+> **Every command except one never writes to GitHub** (no comments, reviews,
+> pushes, or commits). The lone exception, **`ai-open-pr`, does modify your repo
+> and the remote** — it confirms before each step. See
+> [Privacy & security](#privacy--security).
 
 ## What you get
 
@@ -21,17 +22,24 @@ and hands you a single prompt to paste into your AI tool of choice. One command,
 | `ai-explain-pr` | Plain-English explanation of a change set            | No (read-only)     |
 | `ai-draft-pr`   | Drafts a PR title + description (fills team template) | No (read-only)     |
 | `ai-open-pr`    | Commits, pushes, and **opens** a GitHub PR           | **Yes**            |
+| `ai-explain-project` | Explains the **whole project** (architecture + blocks) | No (read-only) |
+| `ai-project-audit`   | **Whole-project** high/medium **bug audit** (Jira-ready) | No (read-only) |
+| `ai-jira-draft`      | Turns audited bugs into humanized **Jira tickets**   | No (read-only) |
 
 `ai-gh` is the easiest entry point — run `ai-gh help` for a cheat sheet, or use
-it as a dispatcher: `ai-gh review --pr 123 --copy`, `ai-gh open origin/main`, etc.
+it as a dispatcher: `ai-gh review --pr 123 --copy`, `ai-gh open origin/main`,
+`ai-gh audit`, etc.
 
-The read-only commands can work from:
+The change-set commands can work from:
 
 - a **local branch** vs a base ref (`git diff BASE...HEAD`),
 - **staged** changes (`git diff --cached`), or
 - a **GitHub PR** via the `gh` CLI (`ai-pr-review` / `ai-explain-pr` only).
 
-`ai-open-pr` always works on the **current branch** vs a base ref.
+`ai-open-pr` always works on the **current branch** vs a base ref. The three
+**whole-project** commands (`ai-explain-project`, `ai-project-audit`,
+`ai-jira-draft`) ignore the change set and operate on the entire repo — see
+[Whole-project commands](#whole-project-commands).
 
 ## Installation
 
@@ -53,8 +61,9 @@ cd ai-gh-tools
 - create git aliases (`git ai-gh`, `git ai-review`, `git ai-explain`,
   `git ai-draft-pr`, `git ai-open-pr`),
 - install the Claude Code skills (`/pr-review`, `/explain-pr`, `/draft-pr`,
-  `/open-pr`) and the reviewer subagents into `~/.claude/skills` and
-  `~/.claude/agents` (set `AGH_INSTALL_SKILLS=0` to skip).
+  `/open-pr`, `/explain-project`, `/project-audit`, `/jira-draft`) and the reviewer
+  subagents into `~/.claude/skills` and `~/.claude/agents` (set
+  `AGH_INSTALL_SKILLS=0` to skip).
 
 Open a new shell (or `source ~/.zshrc`) afterwards.
 
@@ -155,6 +164,61 @@ computer. If pasting doesn't happen, grant it manually under
 **System Settings → Privacy & Security → Accessibility** and enable your
 terminal app (Terminal/iTerm) or Cursor's integrated terminal. On non-macOS, or
 if anything fails, the prompt is still left on your clipboard to paste manually.
+
+## Whole-project commands
+
+Three commands work on the **entire repo** instead of a change set, and are best
+driven by their skills, which fan work out to per-block subagents.
+`ai-explain-project` and `ai-project-audit` build whole-project context (file tree,
+the repo's rules, READMEs, metadata, and a definition inventory); `ai-jira-draft`
+instead embeds the audit's bug JSON plus repo metadata and the toolkit rules.
+
+Each bare command just builds a prompt (copy or `--out` it, like the other
+`ai-*` tools); the bug-finding and the `agh-audit-bugs.json` handoff happen in the
+`/project-audit` **skill** (see the pipeline below), not the CLI.
+
+```bash
+# 1. Explain the whole project (architecture, blocks, how they connect)
+ai-explain-project --copy
+
+# 2. Audit the whole project for high/medium bugs (low-impact nits are skipped).
+#    Each bug is tied to a block + its blast radius (what depends on it).
+ai-project-audit --out /tmp/project-audit.md
+
+# 3. Draft Jira tickets from a bug file (the JSON the /project-audit skill writes)
+ai-jira-draft --from path/to/agh-audit-bugs.json --copy
+```
+
+The intended flow is a **pipeline**, run via the skills in Claude Code / Cursor:
+
+1. **`/explain-project`** — get oriented (add `--deep` to explain each block with a
+   subagent and get a dependency diagram).
+2. **`/project-audit --deep`** — you pick which blocks to audit (a checkbox), it runs
+   one bug-hunter per block, **adversarially verifies** each finding (so only
+   valid/worth-filing bugs survive), attributes each to its block + blast radius,
+   then **prints the audit in chat AND writes a bug file** to
+   `${TMPDIR:-/tmp}/agh-audit-bugs.json`.
+3. **`/jira-draft --from <that file>`** — re-validates each bug as a final gate and
+   drafts a plain-language Jira **title + description** per bug.
+
+The audit → jira-draft handoff is a JSON file so you can inspect or trim the bug
+list in between. The bug record shape:
+
+```json
+{ "repo": "...", "bugs": [ {
+  "id": "B1", "title": "...", "severity": "high|medium",
+  "block": "lib/github.sh", "dependents": ["bin/ai-pr-review"],
+  "evidence": ["lib/github.sh:39"], "impact": "...", "suggested_fix": "...",
+  "lens": "correctness|security|performance|config", "confidence": "confirmed|likely"
+} ] }
+```
+
+> **Jira creation is not wired** — `ai-jira-draft` produces paste-ready tickets; it
+> never contacts Jira. Auto-filing would need an Atlassian integration.
+
+These commands take no base ref / `--pr` / `--staged`. `ai-jira-draft` requires
+`--from FILE`. Useful env knobs: `AGH_TREE_CAP` (max files listed, default 400),
+`AGH_SYMBOLS_CAP` (max definitions, default 500).
 
 ## How to review my own PR
 
@@ -282,9 +346,10 @@ No re-install needed unless `install.sh` itself changed (re-run it if so).
 
 ## Privacy & security
 
-- **Three tools are read-only.** `ai-pr-review`, `ai-explain-pr`, and
-  `ai-draft-pr` only run read-only git/`gh` commands. They never call
-  `gh pr review`, `gh pr comment`, `gh pr merge`, `git push`, or create commits.
+- **All commands but one are read-only.** `ai-pr-review`, `ai-explain-pr`,
+  `ai-draft-pr`, `ai-explain-project`, `ai-project-audit`, and `ai-jira-draft`
+  only run read-only git/`gh` commands. They never call `gh pr review`,
+  `gh pr comment`, `gh pr merge`, `git push`, or create commits.
 - **`ai-open-pr` is the exception.** It intentionally commits, pushes, and opens
   a PR. It confirms before each mutating step (unless `--yes`), supports
   `--dry-run`, and never force-pushes, amends, or skips git hooks.
@@ -305,7 +370,8 @@ ai-gh-tools/
   rules/          # general.mdc + optional rules/<repo-name>.mdc overlays
   templates/      # pr-body.md (the team PR template used by ai-open-pr)
   skills/         # Claude Code / Cursor SKILL.md flows (pr-review, explain-pr, …)
-  agents/         # review-* reviewer subagents (used by /pr-review --deep)
+  agents/         # subagents: review-* (/pr-review --deep), bug-hunter +
+                  #   project-explainer (/project-audit, /explain-project)
   examples/       # sample generated output
   tests/          # deterministic unit tests for the shared helpers
   install.sh
@@ -315,8 +381,9 @@ ai-gh-tools/
 ## Running the tests
 
 The pure shell helpers (branch humanizing, the `--exclude` glob filters,
-remote-owner parsing, and project-rules gathering — `.cursor/rules`,
-`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) have deterministic unit tests:
+remote-owner parsing, project-rules gathering — `.cursor/rules`, `.cursorrules`,
+`CLAUDE.md`, `AGENTS.md` — the whole-project file tree / `git ls-files` helper,
+and shell-function symbol detection) have deterministic unit tests:
 
 ```bash
 ./tests/test_helpers.sh

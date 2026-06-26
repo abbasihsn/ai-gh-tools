@@ -4,6 +4,8 @@
 # Prints a cheat sheet, and dispatches subcommands to the individual tools:
 #   ai-gh review  -> ai-pr-review     ai-gh draft -> ai-draft-pr
 #   ai-gh explain -> ai-explain-pr    ai-gh open  -> ai-open-pr
+#   ai-gh explain-project -> ai-explain-project   ai-gh audit -> ai-project-audit
+#   ai-gh jira    -> ai-jira-draft
 set -euo pipefail
 
 # Resolve this script's real directory (following symlinks) to find siblings.
@@ -33,6 +35,11 @@ COMMANDS:
   draft     Draft a PR title + description prompt   -> ai-draft-pr     [read-only]
   open      Commit, push, and OPEN a GitHub PR      -> ai-open-pr      [writes!]
 
+WHOLE-PROJECT COMMANDS (no diff; operate on the entire repo):
+  explain-project  Explain the whole project          -> ai-explain-project [read-only]
+  audit            Whole-project high/medium bug audit -> ai-project-audit   [read-only]
+  jira             Draft Jira tickets from audited bugs -> ai-jira-draft     [read-only]
+
 COMMON FLAGS (review / explain / draft):
   --copy            Copy the prompt to the clipboard
   --cursor          Open a new Cursor chat tab and paste (macOS)
@@ -50,9 +57,13 @@ EXAMPLES:
   ai-gh explain --staged --copy
   ai-gh draft origin/main --ticket PROJ-123 --copy
   ai-gh open origin/main --ticket PROJ-123 --dry-run
+  ai-gh explain-project --copy
+  ai-gh audit --out /tmp/project-audit.md
+  ai-gh jira --from /tmp/agh-audit-bugs.json --copy
 
 Run 'ai-gh <command> --help' for the full options of each command.
-Read-only: review / explain / draft. Writes to git + GitHub: open.
+Read-only: review / explain / draft / explain-project / audit / jira.
+Writes to git + GitHub: open.
 EOF
 }
 
@@ -68,6 +79,12 @@ case "$cmd" in
     shift; exec "$_BIN_DIR/ai-draft-pr" "$@" ;;
   open|open-pr|ai-open-pr)
     shift; exec "$_BIN_DIR/ai-open-pr" "$@" ;;
+  explain-project|ai-explain-project)
+    shift; exec "$_BIN_DIR/ai-explain-project" "$@" ;;
+  audit|project-audit|ai-project-audit)
+    shift; exec "$_BIN_DIR/ai-project-audit" "$@" ;;
+  jira|jira-draft|ai-jira-draft)
+    shift; exec "$_BIN_DIR/ai-jira-draft" "$@" ;;
   *)
     printf "ai-gh: unknown command '%s'. Try: ai-gh help\n" "$cmd" >&2
     exit 1 ;;

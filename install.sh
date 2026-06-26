@@ -32,21 +32,29 @@ INSTALL_SKILLS="${AGH_INSTALL_SKILLS:-1}"
 # want them available in:  ./install.sh --cursor-project /path/to/repo
 CURSOR_PROJECT=""
 
-COMMANDS=(ai-gh ai-pr-review ai-explain-pr ai-draft-pr ai-open-pr)
+COMMANDS=(ai-gh ai-pr-review ai-explain-pr ai-draft-pr ai-open-pr
+  ai-explain-project ai-project-audit ai-jira-draft)
 
 # Claude Code / Cursor skills (each is a directory holding a SKILL.md). The first
 # three wrap the read-only prompt tools as the "hybrid" flow: the tool assembles
 # deterministic context, then the AI reviews/explains/drafts with live repo access.
 # open-pr is the one mutating skill: it drafts a body, then runs ai-open-pr to
 # commit, push, and open the PR (gated on an in-chat confirmation).
-SKILLS=(pr-review explain-pr draft-pr open-pr)
+# The project-* skills work on the WHOLE repo (not a diff): explain-project maps
+# and explains it; project-audit finds high/medium bugs and writes a bug JSON;
+# jira-draft turns that JSON into humanized Jira tickets.
+SKILLS=(pr-review explain-pr draft-pr open-pr
+  explain-project project-audit jira-draft)
 
-# Reviewer subagents (cross-agent markdown; read by both Claude Code and Cursor)
-# used by the pr-review skill's --deep mode to review each lens in parallel.
+# Reviewer subagents (cross-agent markdown; read by both Claude Code and Cursor).
+# The review-* set powers the pr-review skill's --deep mode (one lens each).
+# bug-hunter / project-explainer power the whole-project audit / explain skills
+# (one per block).
 AGENTS=(
   review-correctness review-architecture review-code-quality
   review-types-apis review-security review-performance
   review-config-devops review-testing-docs
+  bug-hunter project-explainer
 )
 
 # Commands removed/renamed in past versions, cleaned up on (re)install so an
@@ -265,7 +273,10 @@ if command -v git >/dev/null 2>&1; then
   git config --global alias.ai-explain  "!$INSTALL_DIR/ai-explain-pr"
   git config --global alias.ai-draft-pr "!$INSTALL_DIR/ai-draft-pr"
   git config --global alias.ai-open-pr  "!$INSTALL_DIR/ai-open-pr"
-  info "  configured git aliases: git ai-gh / git ai-review / git ai-explain / git ai-draft-pr / git ai-open-pr"
+  git config --global alias.ai-explain-project "!$INSTALL_DIR/ai-explain-project"
+  git config --global alias.ai-project-audit   "!$INSTALL_DIR/ai-project-audit"
+  git config --global alias.ai-jira-draft      "!$INSTALL_DIR/ai-jira-draft"
+  info "  configured git aliases: git ai-gh / git ai-review / git ai-explain / git ai-draft-pr / git ai-open-pr / git ai-explain-project / git ai-project-audit / git ai-jira-draft"
   # Drop git aliases for renamed/removed commands.
   for old_alias in "${OBSOLETE_GIT_ALIASES[@]}"; do
     if git config --global --get "alias.$old_alias" >/dev/null 2>&1; then
@@ -288,6 +299,9 @@ Commands:
   ai-explain-pr   Plain-English explanation prompt      (read-only)
   ai-draft-pr     PR title + description prompt          (read-only)
   ai-open-pr      Commit, push, and OPEN a GitHub PR     (modifies remote)
+  ai-explain-project  Explain the WHOLE project              (read-only)
+  ai-project-audit    Whole-project high/medium bug audit    (read-only)
+  ai-jira-draft       Draft Jira tickets from audited bugs   (read-only)
 
 Examples (run from inside any git repo):
   ai-pr-review origin/main --copy
@@ -310,6 +324,10 @@ Skills (run inside any repo, in Claude Code or Cursor):
   /explain-pr --staged             Explain a change set in plain English
   /draft-pr   origin/main          Draft a PR title + description
   /open-pr    origin/main          Draft a body, then commit + push + open the PR
+  /explain-project                 Explain the whole project (--deep per block)
+  /project-audit --deep            Whole-project bug audit; you pick blocks, it
+                                   verifies + writes a bug JSON
+  /jira-draft --from <bugs.json>   Validate + draft humanized Jira tickets
 
   The first three skills shell out to the read-only tools above for deterministic
   context, then the AI reviews/explains/drafts with live codebase access. --deep
