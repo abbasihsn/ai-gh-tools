@@ -209,9 +209,12 @@ agh_print_staged_metadata() {
 #   $1 = raw value   $2 = default
 _agh_cap() {
   case "$1" in
-    ''|*[!0-9]*) printf '%s' "$2" ;;
-    *) if [ "$1" -gt 0 ]; then printf '%s' "$1"; else printf '%s' "$2"; fi ;;
+    ''|*[!0-9]*) printf '%s' "$2"; return ;;
   esac
+  # $1 is all digits here. Reject 0 and absurdly long values (>9 digits would make
+  # `[ -gt ]` warn about integer overflow); 9 digits is already far past any file
+  # count. The `&&` short-circuits before the numeric test on over-long input.
+  if [ "${#1}" -le 9 ] && [ "$1" -gt 0 ]; then printf '%s' "$1"; else printf '%s' "$2"; fi
 }
 
 # Whole-project file inventory: every tracked file, with a per-top-level-block
@@ -255,13 +258,13 @@ agh_print_file_tree() {
 }
 
 # Inventory of existing function/class/method definitions across the repo, so a
-# reviewer can detect duplication against code that is NOT in the diff (i.e. what
-# already exists on the base/main). Local checkout is the source of truth, so
-# this is only meaningful in local/staged mode.
+# reviewer can detect duplication against code that already exists. The local
+# checkout is the source of truth.
 #   $1 = repo root
-#   Opt-in: only runs when AGH_WITH_SYMBOLS=1 (the --symbols flag). It's a
-#   fallback for non-agentic AI tools; in Cursor, prefer letting the AI explore
-#   the codebase directly. AGH_SYMBOLS_CAP caps the number of lines.
+#   Runs when AGH_WITH_SYMBOLS=1 — set by the `--symbols` flag in local/staged
+#   mode (a fallback for non-agentic AI tools; in Cursor, prefer letting the AI
+#   explore the codebase), and forced on in whole-project mode by
+#   _agh_build_project. AGH_SYMBOLS_CAP caps the number of lines.
 agh_print_symbol_inventory() {
   local root="${1:-}"
   [ "${AGH_WITH_SYMBOLS:-}" = "1" ] || return 0
@@ -270,21 +273,20 @@ agh_print_symbol_inventory() {
 
   local cap
   cap="$(_agh_cap "${AGH_SYMBOLS_CAP:-}" 500)"
-  # Definition-like lines across common languages (captures methods via the
-  # leading-whitespace allowance, e.g. `def` inside a class). `function` also
-  # covers the `function name` shell style.
+  # Keyword-led definitions across non-shell languages (captures methods via the
+  # leading-whitespace allowance, e.g. `def` inside a class). Shell is handled by
+  # sh_pattern below — keeping shell out of this keyword set avoids matching shell
+  # builtin *calls* (`type foo`, `module bar`) as if they were definitions.
   local kw_pattern='^[[:space:]]*(export[[:space:]]+)?(public[[:space:]]+|private[[:space:]]+)?(async[[:space:]]+)?(def|class|func|function|module|interface|type|struct|trait|enum)[[:space:]]+[A-Za-z_]'
-  # POSIX-shell function defs (`name() {`) have no leading keyword, so they're
-  # matched separately and ONLY in shell files. Requiring the opening brace keeps
-  # bare call sites (`foo()`) in any language out of the inventory.
-  local sh_pattern='^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{'
+  # Shell function defs, matched ONLY in shell files: `name() {` (brace required,
+  # so bare call sites are excluded) or the `function name` keyword form.
+  local sh_pattern='^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)[[:space:]]*\{|function[[:space:]]+[A-Za-z_])'
 
   local tmp
   tmp="$(agh_mktemp)"
   ( cd "$root" && git grep -nE "$kw_pattern" -- \
       '*.py' '*.pyi' '*.js' '*.jsx' '*.ts' '*.tsx' '*.go' '*.rb' '*.rs' \
-      '*.java' '*.kt' '*.cs' '*.php' '*.scala' '*.swift' \
-      '*.sh' '*.bash' 2>/dev/null ) >"$tmp" || true
+      '*.java' '*.kt' '*.cs' '*.php' '*.scala' '*.swift' 2>/dev/null ) >"$tmp" || true
   ( cd "$root" && git grep -nE "$sh_pattern" -- \
       '*.sh' '*.bash' 2>/dev/null ) >>"$tmp" || true
   [ -s "$tmp" ] || return 0

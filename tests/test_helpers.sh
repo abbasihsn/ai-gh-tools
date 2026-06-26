@@ -151,7 +151,12 @@ TREE_REPO="$(mktemp -d "${TMPDIR:-/tmp}/agh-tree.XXXXXX")"
   printf 'util\n'   >lib/util.sh
   printf 'cli\n'    >bin/tool
   printf '%s\n' 'def real_def():' '    pass' '' 'do_work()'  >app.py
-  printf '%s\n' 'my_shell_fn() {' '  echo hi' '}'            >lib/fns.sh
+  # shell file: a paren def, a `function`-keyword def, a builtin call, a
+  # braceless call (the last two must NOT be picked up as definitions).
+  printf '%s\n' 'my_shell_fn() {' '  echo hi' '}' \
+                'function fn_kw {' '  :' '}' \
+                'type some_builtin_call' \
+                'bare_call()' >lib/fns.sh
   git add -A
 )
 ALL_FILES="$(cd "$TREE_REPO" && agh_git_all_files)"
@@ -172,16 +177,27 @@ check "file-tree counts bin block (1 file)"  "1" "$(tree_block_count "$TREE_OUT"
 # AGH_TREE_CAP truncates and reports the remainder
 contains "file-tree truncates at AGH_TREE_CAP=1" \
   "$(AGH_TREE_CAP=1 agh_print_file_tree "$TREE_REPO")" "more files truncated" "present"
-# A non-numeric cap must NOT break the listing; it falls back to the default
-# (so the file list still appears, with no truncation).
+# Invalid / zero / negative caps must NOT break the listing; _agh_cap falls back
+# to the default (so the file list still appears, with no truncation/crash).
 contains "invalid AGH_TREE_CAP falls back (still lists files)" \
   "$(AGH_TREE_CAP=abc agh_print_file_tree "$TREE_REPO")" "lib/common.sh" "present"
+contains "AGH_TREE_CAP=0 falls back (still lists files)" \
+  "$(AGH_TREE_CAP=0 agh_print_file_tree "$TREE_REPO")" "lib/common.sh" "present"
+contains "negative AGH_TREE_CAP falls back (still lists files)" \
+  "$(AGH_TREE_CAP=-3 agh_print_file_tree "$TREE_REPO")" "lib/common.sh" "present"
 
 # --- agh_print_symbol_inventory --------------------------------------------
 SYM_ON="$(AGH_WITH_SYMBOLS=1 agh_print_symbol_inventory "$TREE_REPO")"
-contains "symbol inventory detects shell function" "$SYM_ON" "my_shell_fn" "present"
-contains "symbol inventory detects keyword def"    "$SYM_ON" "real_def"    "present"
-contains "symbol inventory excludes bare calls"    "$SYM_ON" "do_work"     "absent"
+contains "symbol inventory detects shell paren def"     "$SYM_ON" "my_shell_fn"        "present"
+contains "symbol inventory detects function-keyword def" "$SYM_ON" "fn_kw"             "present"
+contains "symbol inventory detects keyword def"         "$SYM_ON" "real_def"           "present"
+contains "symbol inventory excludes python bare call"   "$SYM_ON" "do_work"            "absent"
+contains "symbol inventory excludes shell builtin call" "$SYM_ON" "some_builtin_call"  "absent"
+contains "symbol inventory excludes braceless shell call" "$SYM_ON" "bare_call"        "absent"
+# AGH_SYMBOLS_CAP truncates the inventory
+contains "symbol inventory truncates at AGH_SYMBOLS_CAP=1" \
+  "$(AGH_WITH_SYMBOLS=1 AGH_SYMBOLS_CAP=1 agh_print_symbol_inventory "$TREE_REPO")" \
+  "more definitions truncated" "present"
 contains "symbol inventory is off without --symbols" \
   "$(agh_print_symbol_inventory "$TREE_REPO")" "my_shell_fn" "absent"
 rm -rf "$TREE_REPO"

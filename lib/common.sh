@@ -356,6 +356,10 @@ agh_parse_args() {
   if [ "${AGH_PROJECT_MODE:-0}" = "1" ]; then
     [ -z "$OPT_BASE" ] || agh_die "this command reviews the whole project; it takes no base ref ('$OPT_BASE')."
     [ "$OPT_STAGED" != "1" ] || agh_die "this command reviews the whole project; --staged is not supported."
+    # These are accepted by the parser but unused in whole-project mode; warn
+    # rather than silently ignore so a user isn't misled.
+    [ -z "$OPT_TICKET" ] || agh_warn "--ticket has no effect in whole-project mode; ignoring it."
+    [ "$OPT_INCLUDE_WT" != "1" ] || agh_warn "--include-working-tree has no effect in whole-project mode; ignoring it."
   fi
   # From-file mode (jira-draft): consumes a bug file, not a change set.
   if [ "${AGH_FROM_MODE:-0}" = "1" ]; then
@@ -363,6 +367,12 @@ agh_parse_args() {
     [ -z "$OPT_BASE" ] || agh_die "this command takes --from FILE, not a base ref ('$OPT_BASE')."
     [ "$OPT_STAGED" != "1" ] || agh_die "this command takes --from FILE; --staged is not supported."
     [ "$OPT_INCLUDE_WT" != "1" ] || agh_die "this command takes --from FILE; --include-working-tree is not supported."
+    # jira-draft embeds only the bug JSON + metadata + toolkit rules, so these
+    # context toggles do nothing here; warn rather than silently ignore.
+    if [ "${AGH_NO_PROJECT_RULES:-}" = "1" ] || [ "${AGH_NO_READMES:-}" = "1" ] || [ "${AGH_WITH_SYMBOLS:-}" = "1" ]; then
+      agh_warn "--no-project-rules / --no-readmes / --symbols have no effect in jira-draft mode; ignoring them."
+    fi
+    [ -z "$OPT_TICKET" ] || agh_warn "--ticket has no effect in jira-draft mode; ignoring it."
   fi
 }
 
@@ -556,7 +566,7 @@ _agh_build_jira() {
     printf '\n## Bugs to turn into Jira tickets (from ai-project-audit)\n\n'
     printf -- '- source file: %s\n\n' "$OPT_FROM"
     printf '```json\n'
-    cat "$OPT_FROM"
+    cat -- "$OPT_FROM"
     printf '\n```\n'
   } >"$out"
 }

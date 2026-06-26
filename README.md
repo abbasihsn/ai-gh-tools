@@ -173,6 +173,10 @@ driven by their skills, which fan work out to per-block subagents.
 the repo's rules, READMEs, metadata, and a definition inventory); `ai-jira-draft`
 instead embeds the audit's bug JSON plus repo metadata and the toolkit rules.
 
+Each bare command just builds a prompt (copy or `--out` it, like the other
+`ai-*` tools); the bug-finding and the `agh-audit-bugs.json` handoff happen in the
+`/project-audit` **skill** (see the pipeline below), not the CLI.
+
 ```bash
 # 1. Explain the whole project (architecture, blocks, how they connect)
 ai-explain-project --copy
@@ -181,8 +185,8 @@ ai-explain-project --copy
 #    Each bug is tied to a block + its blast radius (what depends on it).
 ai-project-audit --out /tmp/project-audit.md
 
-# 3. Turn audited bugs into humanized Jira tickets (reads the audit's JSON)
-ai-jira-draft --from "${TMPDIR:-/tmp}/agh-audit-bugs.json" --copy
+# 3. Draft Jira tickets from a bug file (the JSON the /project-audit skill writes)
+ai-jira-draft --from path/to/agh-audit-bugs.json --copy
 ```
 
 The intended flow is a **pipeline**, run via the skills in Claude Code / Cursor:
