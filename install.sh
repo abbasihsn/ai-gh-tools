@@ -26,10 +26,12 @@ CURSOR_PROJECT=""
 
 COMMANDS=(ai-gh ai-pr-review ai-explain-pr ai-draft-pr ai-open-pr)
 
-# Claude Code / Cursor skills (each is a directory holding a SKILL.md). They wrap
-# the read-only prompt tools as the "hybrid" flow: the tool assembles
+# Claude Code / Cursor skills (each is a directory holding a SKILL.md). The first
+# three wrap the read-only prompt tools as the "hybrid" flow: the tool assembles
 # deterministic context, then the AI reviews/explains/drafts with live repo access.
-SKILLS=(pr-review explain-pr draft-pr)
+# open-pr is the one mutating skill: it drafts a body, then runs ai-open-pr to
+# commit, push, and open the PR (gated on an in-chat confirmation).
+SKILLS=(pr-review explain-pr draft-pr open-pr)
 
 # Reviewer subagents (cross-agent markdown; read by both Claude Code and Cursor)
 # used by the pr-review skill's --deep mode to review each lens in parallel.
@@ -256,10 +258,12 @@ Skills (run inside any repo, in Claude Code or Cursor):
   /pr-review  --pr 123 --deep --verify   ...and adversarially refute high findings
   /explain-pr --staged             Explain a change set in plain English
   /draft-pr   origin/main          Draft a PR title + description
+  /open-pr    origin/main          Draft a body, then commit + push + open the PR
 
-  The skills shell out to the read-only tools above for deterministic context,
-  then the AI reviews/explains/drafts with live codebase access. --deep delegates
-  to the review-* subagents (installed in ~/.claude/agents).
+  The first three skills shell out to the read-only tools above for deterministic
+  context, then the AI reviews/explains/drafts with live codebase access. --deep
+  delegates to the review-* subagents (installed in ~/.claude/agents). /open-pr
+  wraps ai-open-pr and DOES modify your repo and GitHub (it confirms first).
 
 For Cursor (project-scoped skills), also run:
   ./install.sh --cursor-project /path/to/your/repo
